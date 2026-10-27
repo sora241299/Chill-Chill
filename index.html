@@ -1,0 +1,2430 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SORA GROUP - Virtual AI Enterprise Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- TWEEN.js for smooth animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            user-select: none;
+        }
+
+        #webgl-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Glassmorphism Styling */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .glass-button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+        }
+
+        .glass-button:hover {
+            background: rgba(255, 255, 255, 0.18);
+            border-color: rgba(255, 255, 255, 0.35);
+            transform: translateY(-1px);
+        }
+
+        /* HTML Overlay Labels in 3D Space */
+        .agent-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            white-space: nowrap;
+            transition: opacity 0.3s;
+            z-index: 5;
+        }
+
+        .speech-bubble {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            z-index: 12;
+            animation: popIn 0.3s ease-out;
+            width: max-content;
+            max-width: 210px;
+            background: rgba(255, 255, 255, 0.97);
+            color: #1e293b;
+            border: 2px solid var(--bc, #a78bfa);
+            border-radius: 14px;
+            padding: 5px 10px 6px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: center;
+            white-space: normal;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+            transition: opacity 0.35s;
+        }
+        .speech-bubble.fade { opacity: 0; }
+        .speech-bubble::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -8px;
+            width: 12px;
+            height: 12px;
+            background: inherit;
+            border-right: 2px solid var(--bc, #a78bfa);
+            border-bottom: 2px solid var(--bc, #a78bfa);
+            transform: translateX(-50%) rotate(45deg);
+        }
+        .speech-bubble .bubble-name {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--bc, #a78bfa);
+            margin-bottom: 1px;
+        }
+
+        @keyframes popIn {
+            0% { transform: translate(-50%, -80%) scale(0.5); opacity: 0; }
+            100% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        /* Glow Animations */
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.8; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+
+        .pulse-active {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+
+        /* Avatar Status Icon Badges */
+        .status-badge {
+            animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Canvas Container -->
+    <div id="webgl-container"></div>
+
+    <!-- Container for 3D Dynamic Labels & Speech Bubbles -->
+    <div id="labels-container" class="absolute top-0 left-0 w-full h-full pointer-events-none z-5 overflow-hidden"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="relative z-10 w-full h-screen pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- TOP HEADER NAVBAR -->
+        <div class="flex justify-between items-center w-full pointer-events-auto">
+            <!-- Brand Logo & Title -->
+            <div class="glass-panel px-5 py-3 rounded-2xl flex items-center gap-4 shadow-2xl">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-purple-500/30">
+                    S
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-lg text-white tracking-wide">SORA GROUP</h1>
+                        <span class="px-2 py-0.5 text-[10px] uppercase tracking-wider font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full">Autonomous AI Enterprise</span>
+                    </div>
+                    <p class="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        AI Agents Cooperating & Delivering Reports
+                    </p>
+                </div>
+            </div>
+
+            <!-- Quick Navigation Pills -->
+            <div class="hidden lg:flex items-center gap-2 glass-panel p-1.5 rounded-2xl">
+                <button onclick="switchTab('3d')" id="tab-btn-3d" class="glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-purple-600/40 border-purple-500/40 flex items-center gap-2">
+                    <i class="fa-solid fa-cubes text-purple-400"></i> Văn Phòng 3D
+                </button>
+                <button onclick="switchTab('analytics')" id="tab-btn-analytics" class="glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-emerald-400"></i> Tiến Độ & Số Liệu
+                </button>
+                <div class="h-4 w-[1px] bg-white/10 mx-1"></div>
+                <button onclick="focusOnBuilding('center')" class="glass-button px-3 py-2 rounded-xl text-xs font-medium text-pink-300 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-building-columns text-pink-400"></i> Sora HQ
+                </button>
+                <button onclick="focusOnBuilding('creative')" class="glass-button px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-clapperboard text-rose-400"></i> Sáng Tạo
+                </button>
+                <button onclick="focusOnBuilding('cosplay')" class="glass-button px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-mask text-amber-400"></i> Cosplay
+                </button>
+                <button onclick="focusOnBuilding('event')" class="glass-button px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-bullhorn text-cyan-400"></i> Sự Kiện
+                </button>
+                <button onclick="focusOnBuilding('business')" class="glass-button px-3 py-2 rounded-xl text-xs font-medium text-gray-300 hover:text-white flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-line text-emerald-400"></i> Kinh Doanh
+                </button>
+            </div>
+
+            <!-- Global Action Tools -->
+            <div class="flex items-center gap-3">
+                <button onclick="switchTab('analytics')" class="lg:hidden glass-panel hover:bg-emerald-600/30 px-3.5 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold text-emerald-300 border border-emerald-500/30 shadow-lg pointer-events-auto transition">
+                    <i class="fa-solid fa-chart-pie text-emerald-400"></i> Số Liệu
+                </button>
+                <button onclick="openCommandModal()" class="glass-panel hover:bg-pink-600/30 px-4 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold text-pink-300 border border-pink-500/40 shadow-lg pointer-events-auto transition">
+                    <i class="fa-solid fa-bullseye text-pink-400"></i> Ra Chỉ Đạo
+                </button>
+                <button onclick="triggerMeetingEvent()" class="glass-panel hover:bg-purple-600/30 px-4 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold text-purple-300 border border-purple-500/30 shadow-lg pointer-events-auto transition">
+                    <i class="fa-solid fa-users-viewfinder text-purple-400"></i> Triệu Tập Họp
+                </button>
+                <button onclick="resetCameraView()" class="glass-panel hover:bg-white/10 w-11 h-11 rounded-2xl flex items-center justify-center text-gray-300 hover:text-white transition shadow-lg pointer-events-auto" title="Reset Camera View">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 shadow-lg">
+                    <div class="text-right">
+                        <div class="text-xs font-semibold text-white">Founder (CEO)</div>
+                        <div class="text-[10px] text-emerald-400 font-medium">Phê Duyệt Cuối</div>
+                    </div>
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM CONTROLS & STATUS -->
+        <div id="bottom-bar" class="flex justify-between items-end w-full pointer-events-auto">
+            <!-- 3D Controls Help Box -->
+            <div class="glass-panel px-4 py-3 rounded-2xl text-xs text-gray-400 hidden sm:flex items-center gap-4 border border-white/5">
+                <span class="flex items-center gap-1.5 text-gray-300"><i class="fa-solid fa-mouse text-indigo-400"></i> Xoay 360°: Chuột trái</span>
+                <span class="flex items-center gap-1.5 text-gray-300"><i class="fa-solid fa-arrows-up-down-left-right text-indigo-400"></i> Di chuyển: Chuột phải</span>
+                <span class="flex items-center gap-1.5 text-gray-300"><i class="fa-solid fa-magnifying-glass text-indigo-400"></i> Zoom: Cuộn chuột</span>
+            </div>
+
+            <!-- Quick Action Notification Pill -->
+            <div id="status-pill" class="glass-panel px-5 py-3 rounded-2xl flex items-center gap-3 border border-purple-500/30 text-xs text-purple-200 shadow-2xl">
+                <span class="relative flex h-2.5 w-2.5">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500"></span>
+                </span>
+                <span id="status-text">Các AI Agent đang tự do trao đổi ý tưởng & đi sang Sora Tower nộp báo cáo.</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- FULLSCREEN DASHBOARD OVERLAY TAB: PROGRESS & METRICS -->
+    <div id="analytics-tab" class="fixed inset-0 z-15 glass-panel hidden p-6 md:p-10 overflow-y-auto pointer-events-auto pt-28">
+        <div class="max-w-7xl mx-auto space-y-8">
+            <!-- Analytics Title & Overall KPI Summary -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-white/10">
+                <div>
+                    <h2 class="text-2xl font-bold text-white flex items-center gap-3">
+                        <i class="fa-solid fa-chart-line text-emerald-400"></i>
+                        Thống Kê Tiến Độ & Chỉ Số Hoạt Động
+                    </h2>
+                    <p class="text-xs text-gray-400 mt-1">Giám sát tổng quan tỉ lệ hoàn thành công việc và chỉ số hiệu suất từ các AI Agents</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Tiến Độ Tổng Thể: 84.5%
+                    </span>
+                    <button onclick="switchTab('3d')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition shadow-lg shadow-indigo-600/30 flex items-center gap-2">
+                        <i class="fa-solid fa-cubes"></i> Trở Lại 3D
+                    </button>
+                </div>
+            </div>
+
+            <!-- Global Executive Metric Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-2">
+                    <div class="flex justify-between items-center text-gray-400 text-xs font-medium">
+                        <span>Tổng Nhiệm Vụ</span>
+                        <i class="fa-solid fa-list-check text-indigo-400 text-base"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-white">128 <span class="text-xs text-emerald-400 font-normal">+12 tuần này</span></div>
+                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-indigo-500 h-full rounded-full" style="width: 84%"></div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-2">
+                    <div class="flex justify-between items-center text-gray-400 text-xs font-medium">
+                        <span>Nhiệm Vụ Đã Duyệt</span>
+                        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-emerald-400">108 <span class="text-xs text-gray-400 font-normal">(84.4%)</span></div>
+                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-emerald-500 h-full rounded-full" style="width: 84.4%"></div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-2">
+                    <div class="flex justify-between items-center text-gray-400 text-xs font-medium">
+                        <span>Đang Xử Lý & Chờ Duyệt</span>
+                        <i class="fa-solid fa-spinner text-amber-400 text-base animate-spin"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-amber-400">16 <span class="text-xs text-gray-400 font-normal">(12.5%)</span></div>
+                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-amber-500 h-full rounded-full" style="width: 12.5%"></div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-5 rounded-2xl border border-white/10 space-y-2">
+                    <div class="flex justify-between items-center text-gray-400 text-xs font-medium">
+                        <span>Doanh Thu Dự Phóng</span>
+                        <i class="fa-solid fa-sack-dollar text-cyan-400 text-base"></i>
+                    </div>
+                    <div class="text-2xl font-bold text-cyan-300">440 Triệu <span class="text-xs text-emerald-400 font-normal">VNĐ</span></div>
+                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-cyan-500 h-full rounded-full" style="width: 92%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Departmental Breakdown Section -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider flex items-center justify-between">
+                    <span class="flex items-center gap-2">
+                        <i class="fa-solid fa-building-user text-purple-400"></i> Báo Cáo Tiến Độ, Nhân Sự & Kênh Truyền Thông
+                    </span>
+                    <span class="text-xs text-indigo-300 font-normal">Realtime Performance & Social Metrics</span>
+                </h3>
+
+                <div id="analytics-dept-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Dynamic Department Cards populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT SIDE PANEL (DETAILED INSPECTOR) -->
+    <div id="inspector-panel" class="fixed top-0 right-0 h-full w-full sm:w-[440px] z-20 glass-panel p-6 overflow-y-auto transform translate-x-full transition-transform duration-500 ease-out flex flex-col justify-between border-l border-white/10 shadow-2xl">
+        <div>
+            <!-- Panel Header -->
+            <div class="flex justify-between items-start pb-4 mb-5 border-b border-white/10">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="panel-icon" class="text-xl text-purple-400"><i class="fa-solid fa-building"></i></span>
+                        <h2 id="panel-title" class="text-xl font-bold text-white">Sora Tower</h2>
+                    </div>
+                    <p id="panel-subtitle" class="text-xs text-gray-400 mt-1">Trung tâm Điều hành & Thẩm định Claude AI</p>
+                </div>
+                <button onclick="closeInspector()" class="glass-button w-8 h-8 rounded-xl flex items-center justify-center text-gray-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- AI Agents Active Roster -->
+            <div class="mb-6">
+                <h3 class="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-3 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-indigo-400"></i> Nhân Sự AI Đang Hoạt Động</span>
+                    <span class="text-[10px] text-emerald-400 font-normal">Realtime Action</span>
+                </h3>
+                <div id="agent-list" class="space-y-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Active Task & Proposal Section -->
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-xs uppercase tracking-wider text-gray-400 font-semibold flex items-center gap-2">
+                        <i class="fa-solid fa-file-contract text-emerald-400"></i> Đề Án Vừa Trình Nộp
+                    </h3>
+                    <button onclick="sendAgentToDeliverReport()" class="px-2.5 py-1 bg-purple-600/40 hover:bg-purple-600 border border-purple-500/30 text-[10px] text-purple-200 rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-paper-plane"></i> Yêu cầu AI đi nộp
+                    </button>
+                </div>
+                <div id="proposal-box" class="glass-button p-4 rounded-2xl border border-white/10 space-y-3">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Live Chat / Command Interface -->
+            <div>
+                <h3 class="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-cyan-400"></i> Gửi Chỉ Đạo Trực Tiếp
+                </h3>
+                <div class="flex gap-2">
+                    <input type="text" id="command-input" placeholder="Gõ chỉ đạo cho phòng ban..." class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition">
+                    <button onclick="sendCommand()" class="px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-purple-600/30 flex items-center justify-center">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Approval Buttons (Human-in-the-loop) -->
+        <div id="approval-actions" class="pt-6 mt-6 border-t border-white/10 grid grid-cols-2 gap-3">
+            <button onclick="approveProject()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-check"></i> DUYỆT ĐỀ ÁN
+            </button>
+            <button onclick="rejectProject()" class="w-full py-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate-left"></i> YÊU CẦU SỬA
+            </button>
+        </div>
+    </div>
+
+    <!-- ORCHESTRATOR COMMAND MODAL -->
+    <div id="command-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-3 md:p-6">
+        <div class="glass-panel w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl border border-white/10 shadow-2xl p-5 md:p-7">
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <h2 class="text-lg font-bold text-white flex items-center gap-2"><i class="fa-solid fa-bullseye text-pink-400"></i> Chỉ Đạo Của Founder</h2>
+                    <p class="text-[11px] text-gray-400 mt-1">Claude phân rã mục tiêu cho 5 phòng ban, kiểm duyệt nội dung, rồi trình Founder duyệt cuối.</p>
+                </div>
+                <button onclick="closeCommandModal()" class="w-9 h-9 rounded-xl glass-button text-gray-300 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <label class="text-[11px] text-gray-400 font-semibold">Mật khẩu truy cập <span class="font-normal text-gray-500">(chỉ cần khi gửi qua server, không cần khi dán đề án)</span></label>
+            <input type="password" id="cmd-password" autocomplete="current-password" placeholder="Mật khẩu do Founder đặt trên server" class="w-full mt-1 mb-3 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500">
+
+            <label class="text-[11px] text-gray-400 font-semibold">Chỉ đạo chiến lược</label>
+            <textarea id="cmd-text" rows="3" maxlength="2000" placeholder="VD: Tổ chức Festival Cosplay Cyberpunk 2026 cho 3.000 khách vào tháng 12, mục tiêu hòa vốn và 5 triệu lượt xem video." class="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"></textarea>
+            <div class="flex items-center gap-3 mt-3">
+                <button id="cmd-send" onclick="runCommand()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition shadow-lg shadow-purple-600/30 flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i> Gửi Chỉ Đạo
+                </button>
+                <button onclick="copyClaudePrompt()" class="px-4 py-2.5 glass-button text-pink-300 hover:text-white text-xs font-semibold rounded-xl flex items-center gap-2" title="Copy prompt để dán vào khung chat Claude">
+                    <i class="fa-solid fa-copy"></i> Copy prompt cho Claude chat
+                </button>
+                <span id="cmd-status" class="text-[11px] text-gray-400"></span>
+            </div>
+
+            <details class="mt-4 glass-button rounded-2xl border border-white/10 p-4">
+                <summary class="text-xs font-semibold text-cyan-300 cursor-pointer">Chế độ miễn phí: dán đề án từ khung chat Claude</summary>
+                <p class="text-[11px] text-gray-400 mt-2 leading-relaxed">1) Bấm "Copy prompt cho Claude chat" và dán vào Claude (nhớ gõ chỉ đạo ở ô trên trước khi copy). 2) Claude trả về một khối JSON. 3) Dán khối đó vào đây rồi bấm "Nhập đề án". Không cần server, key hay mật khẩu.</p>
+                <textarea id="cmd-import" rows="5" placeholder="Dán JSON đề án do Claude trả về vào đây..." class="w-full mt-2 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 font-mono"></textarea>
+                <button onclick="importPlan()" class="mt-2 px-5 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2"><i class="fa-solid fa-file-import"></i> Nhập đề án</button>
+            </details>
+
+            <div id="plan-output" class="mt-6 space-y-4"></div>
+
+            <div id="plan-actions" class="hidden mt-6 pt-5 border-t border-white/10 space-y-3">
+                <textarea id="cmd-feedback" rows="2" maxlength="2000" placeholder="Chỉ đạo sửa đổi (nếu muốn Claude làm lại đề án)..." class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-rose-500"></textarea>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="reviseWithFeedback()" class="py-3 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-2"><i class="fa-solid fa-rotate-left"></i> YÊU CẦU SỬA</button>
+                    <button id="plan-approve" onclick="approveProject()" class="py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold text-xs rounded-xl transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2"><i class="fa-solid fa-check"></i> DUYỆT ĐỀ ÁN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- THREE.JS SCENE SCRIPT -->
+    <script>
+        // --- 1. DATA STRUCTURE FOR DEPARTMENTS & AGENTS ---
+        const departmentsData = {
+            center: {
+                title: "Sora Tower (HQ)",
+                subtitle: "Trung Tâm Điều Hành & HQ",
+                icon: "fa-solid fa-building-columns",
+                color: 0xec4899, // Hồng Neon
+                pos: { x: 0, z: 0 },
+                agents: [
+                    { id: "claude_main", role: "Trợ Lý Trưởng", status: "Đang Thẩm Định", score: "98%", tasksDone: 18, efficiency: "Xuất Sắc", duties: ["Phân rã mục tiêu cho 5 phòng ban", "Kiểm duyệt nội dung trước khi trình Founder", "Tổng hợp báo cáo trình Founder"], humanLead: "Founder/CEO", linkedWith: ["sora_orch", "finance_tracker"] },
+                    { id: "sora_orch", role: "Điều Phối Viên", status: "Sẵn Sàng", score: "94%", tasksDone: 14, efficiency: "Tốt", duties: ["Phân bổ task & theo dõi tiến độ liên phòng", "Điều phối họp & nộp báo cáo HQ"], humanLead: "Quản lý Dự án (PM)", linkedWith: ["claude_main", "show_planner"] }
+                ],
+                socialChannels: [
+                    { name: "Sora Portal (Web HQ)", metric: "120,000 Visits/tháng", status: "+18% MoM", color: "text-pink-400" },
+                    { name: "Internal AI Bus", metric: "2,400 Requests/phút", status: "99.9% Uptime", color: "text-indigo-400" }
+                ],
+                notice: "🔔 BÁO CÁO HQ: Đã duyệt 5/5 đề án phòng ban. Hệ thống tự động phân bổ ngân sách 440 Tr VNĐ.",
+                proposal: {
+                title: "Báo Cáo Tổng Hợp: Festival Cosplay Cyberpunk 2026",
+                desc: "Đã tổng hợp từ 5 phòng ban. Tích hợp show costume, booth game và chiến dịch video ngắn 50M views.",
+                budget: "180,000,000 VNĐ",
+                revenue: "320,000,000 VNĐ",
+                status: "🟢 Đề Xuất Phê Duyệt"
+            },
+            stats: { progress: 92, totalTasks: 35, completedTasks: 32, pendingTasks: 3 }
+        },
+        creative: {
+            title: "Phòng Sáng Tạo & Content",
+            subtitle: "Short-form Video & Trending Hub",
+            icon: "fa-solid fa-clapperboard",
+            color: 0xf43f5e,
+            pos: { x: 12, z: 0 },
+            agents: [
+                { id: "trend_scout", role: "Săn Trend & Kịch Bản", status: "Scanning Trends", score: "96%", tasksDone: 12, efficiency: "Xuất Sắc", duties: ["Săn trend TikTok/Shorts", "Viết kịch bản video 15s"], humanLead: "Content Lead", linkedWith: ["video_editor", "ad_optimizer"] },
+                { id: "video_editor", role: "Dựng Video & VFX", status: "Dựng Teaser 3D", score: "91%", tasksDone: 8, efficiency: "Tốt", duties: ["Dựng teaser & VFX", "Đăng video đúng khung giờ vàng"], humanLead: "Video Editor", linkedWith: ["trend_scout", "costume_viz"] }
+            ],
+            socialChannels: [
+                { name: "TikTok @SoraCreative", metric: "1.2M Followers", status: "+45K Views/ngày", color: "text-rose-400" },
+                { name: "YouTube Shorts", metric: "450K Subs", status: "CTR 8.2%", color: "text-red-400" }
+            ],
+            notice: "📣 BÁO CÁO CREATIVE: Video Teaser Cosplay 3D đạt Top #2 Trending TikTok sau 6 giờ đăng tải!",
+            proposal: {
+                title: "Series 10 Video Short Anime Dance",
+                desc: "Kịch bản nhảy cosplay ngắn 15s bắt trend TikTok tối ưu khung giờ 20h.",
+                budget: "12,000,000 VNĐ",
+                revenue: "Truyền thông nhận diện",
+                status: "🟡 Đã Thảo Luận - Chờ Nộp"
+            },
+            stats: { progress: 85, totalTasks: 24, completedTasks: 20, pendingTasks: 4 }
+        },
+        cosplay: {
+            title: "Phòng Cosplay & Tài Năng",
+            subtitle: "Costume Lab & Talent Management",
+            icon: "fa-solid fa-mask",
+            color: 0xf59e0b,
+            pos: { x: 3.7, z: 11.4 },
+            agents: [
+                { id: "talent_match", role: "Casting & Talent", status: "Casting Cosplayer", score: "89%", tasksDone: 7, efficiency: "Tốt", duties: ["Casting & ký hợp đồng cosplayer", "Quản lý lịch diễn talent"], humanLead: "Talent Manager", linkedWith: ["hr_recruiter", "show_planner", "legal_guard", "costume_viz"] },
+                { id: "costume_viz", role: "Design Costume 3D", status: "Render Mesh 3D", score: "95%", tasksDone: 7, efficiency: "Xuất Sắc", duties: ["Thiết kế costume 3D", "Xuất file in 3D cho xưởng"], humanLead: "Costume Designer", linkedWith: ["talent_match", "video_editor"] }
+            ],
+            socialChannels: [
+                { name: "Instagram @SoraCosplay", metric: "320K Followers", status: "+12% Engagement", color: "text-amber-400" },
+                { name: "X (Twitter) Talent Hub", metric: "85K Followers", status: "High Reach", color: "text-yellow-400" }
+            ],
+            notice: "👗 BÁO CÁO COSPLAY: Đã chốt hợp đồng casting 8 Cosplayers hàng đầu cho sự kiện Cyberpunk 2026.",
+            proposal: {
+                title: "Bộ Phác Thảo Costume Mecha-Armor 3D",
+                desc: "Bản vẽ 3D chi tiết bộ giáp Cosplay cho Guest Star. Đã xuất file in 3D.",
+                budget: "35,000,000 VNĐ",
+                revenue: "Độc quyền Show",
+                status: "🟢 Đã Duyệt Thiết Kế"
+            },
+            stats: { progress: 78, totalTasks: 18, completedTasks: 14, pendingTasks: 4 }
+        },
+        event: {
+            title: "Phòng Tổ Chức Sự Kiện",
+            subtitle: "Show Production & Stage Tech",
+            icon: "fa-solid fa-bullhorn",
+            color: 0x06b6d4,
+            pos: { x: -9.7, z: 7.0 },
+            agents: [
+                { id: "show_planner", role: "Đạo Diễn Timeline", status: "Lên Kịch Bản Sân Khấu", score: "92%", tasksDone: 10, efficiency: "Xuất Sắc", duties: ["Kịch bản & timeline sân khấu", "Phân luồng check-in"], humanLead: "Show Director", linkedWith: ["tech_stage", "talent_match", "booth_coordinator", "sora_orch", "hr_recruiter"] },
+                { id: "tech_stage", role: "Kỹ Thuật Stage & LED", status: "Simulating 3D", score: "88%", tasksDone: 8, efficiency: "Tốt", duties: ["Mô phỏng 3D sân khấu", "Kỹ thuật LED, âm thanh, ánh sáng"], humanLead: "Kỹ thuật Stage", linkedWith: ["show_planner", "booth_coordinator"] },
+                { id: "booth_coordinator", role: "Quản Lý Booth", status: "Bố Trí Gian Hàng", score: "86%", tasksDone: 5, efficiency: "Khá", duties: ["Bố trí gian hàng & booth chụp ảnh", "Phối hợp nhà tài trợ tại booth"], humanLead: "Trưởng Booth", linkedWith: ["sponsor_hunter", "tech_stage", "show_planner"] }
+            ],
+            socialChannels: [
+                { name: "Sora Event Portal", metric: "15,000 Vé Đã Đăng Ký", status: "75% Sold Out", color: "text-cyan-400" },
+                { name: "Fanpage Festival", metric: "210K Likes", status: "+8,500 Interacts", color: "text-blue-400" }
+            ],
+            notice: "🎪 BÁO CÁO SỰ KIỆN: Hoàn tất sơ đồ 3D sân khấu chính & bàn giao kỹ thuật LED cho bên đối tác.",
+            proposal: {
+                title: "Sơ Đồ Sân Khấu & Âm Thanh Ánh Sáng",
+                desc: "Bản vẽ phân luồng check-in 3,000 khách, vị trí booth chụp ảnh.",
+                budget: "85,000,000 VNĐ",
+                revenue: "Bán Vé & F&B",
+                status: "🟢 Hoàn Tất Phương Án"
+            },
+            stats: { progress: 88, totalTasks: 26, completedTasks: 23, pendingTasks: 3 }
+        },
+        business: {
+            title: "Phòng Kinh Doanh & Marketing",
+            subtitle: "Sponsorship & Ads Optimization",
+            icon: "fa-solid fa-chart-line",
+            color: 0x10b981,
+            pos: { x: -9.7, z: -7.0 },
+            agents: [
+                { id: "sponsor_hunter", role: "Săn Tài Trợ", status: "Gửi Proposal", score: "95%", tasksDone: 6, efficiency: "Xuất Sắc", duties: ["Gửi proposal tài trợ", "Chốt quyền lợi nhà tài trợ"], humanLead: "BD/Sales Manager", linkedWith: ["legal_guard", "booth_coordinator"] },
+                { id: "ad_optimizer", role: "Ads & Campaign", status: "Running Meta/TikTok", score: "90%", tasksDone: 6, efficiency: "Tốt", duties: ["Chạy & tối ưu Meta/TikTok Ads", "Báo cáo ROAS, CPC"], humanLead: "Performance Marketer", linkedWith: ["trend_scout", "finance_tracker"] }
+            ],
+            socialChannels: [
+                { name: "Meta Ads Campaign", metric: "ROAS 4.8x", status: "Spent: 12M VNĐ", color: "text-emerald-400" },
+                { name: "TikTok Ads Manager", metric: "2.1M Impressions", status: "CPC: 420 VNĐ", color: "text-teal-400" }
+            ],
+            notice: "💰 BÁO CÁO KINH DOANH: Đã ký tài trợ Kim Cương 120M VNĐ với NPH Game X. ROAS Ads giữ mức ổn định 4.8x.",
+            proposal: {
+                title: "Gói Tài Trợ Kim Cương với NPH Game X",
+                desc: "Hợp đồng tài trợ gian hàng + logo truyền thông sự kiện cosplay.",
+                budget: "5,000,000 VNĐ (Ads)",
+                revenue: "120,000,000 VNĐ (Tài trợ)",
+                status: "🟢 Đã Chốt Proposal"
+            },
+            stats: { progress: 80, totalTasks: 15, completedTasks: 12, pendingTasks: 3 }
+        },
+        operations: {
+            title: "Phòng Vận Hành & Hỗ Trợ",
+            subtitle: "Legal, Finance & HR Support",
+            icon: "fa-solid fa-scale-balanced",
+            color: 0x6366f1,
+            pos: { x: 3.7, z: -11.4 },
+            agents: [
+                { id: "legal_guard", role: "Pháp Lý & Hợp Đồng", status: "Soạn Hợp Đồng", score: "93%", tasksDone: 5, efficiency: "Tốt", duties: ["Soạn hợp đồng talent & tài trợ", "Xin giấy phép & bản quyền"], humanLead: "Pháp chế", linkedWith: ["sponsor_hunter", "talent_match"] },
+                { id: "finance_tracker", role: "Kế Toán & Ngân Sách", status: "Auditing Budget", score: "97%", tasksDone: 5, efficiency: "Xuất Sắc", duties: ["Kiểm soát ngân sách", "Đối soát chi phí & doanh thu"], humanLead: "Kế toán", linkedWith: ["ad_optimizer", "claude_main"] },
+                { id: "hr_recruiter", role: "Tuyển Dụng & Nhân Sự", status: "Screening Cosplayer & Staff", score: "90%", tasksDone: 3, efficiency: "Tốt", duties: ["Tuyển staff & cosplayer phụ", "Quản lý ca làm sự kiện"], humanLead: "HR Manager", linkedWith: ["talent_match", "show_planner"] }
+            ],
+            socialChannels: [
+                { name: "Internal Notion/Slack", metric: "99.2% Task On-Time", status: "SLA Compliant", color: "text-indigo-400" },
+                { name: "HR Recruitment Hub", metric: "100% Slot Filled", status: "Active 24/7", color: "text-purple-400" }
+            ],
+            notice: "⚖️ BÁO CÁO VẬN HÀNH: Đã cấp phép bản quyền âm nhạc & hoàn tất hợp đồng bảo hiểm sự kiện.",
+            proposal: {
+                title: "Hợp Đồng Bản Quyền & Giấy Phép Show",
+                desc: "Thủ tục xin giấy phép sở văn hóa và tác quyền âm nhạc cho sự kiện.",
+                budget: "15,000,000 VNĐ",
+                revenue: "An toàn Pháp lý",
+                status: "🟢 Đã Sẵn Sàng"
+            },
+            stats: { progress: 83, totalTasks: 12, completedTasks: 10, pendingTasks: 2 }
+        }
+    };
+
+        // Activity Presets (Icons, Dynamic LED Colors & Bubbles inspired by GitHub virtual offices)
+        const activityTypes = {
+            WORKING: {
+                icon: "⌨️",
+                color: 0x3b82f6, // Vibrant Blue
+                badgeBg: "bg-blue-600/90 border-blue-400",
+                dialogues: ["Đang gõ kịch bản gấp...", "Lên file Excel báo cáo...", "Đang xử lý dữ liệu cho sếp!"]
+            },
+            THINKING: {
+                icon: "💡",
+                color: 0xa855f7, // Cyber Purple
+                badgeBg: "bg-purple-600/90 border-purple-400",
+                dialogues: ["Đang nghĩ ý tưởng mới...", "Đang phân tích xu hướng TikTok...", "💡 A ha! Ra phương án rồi!"]
+            },
+            RESTING: {
+                icon: "☕",
+                color: 0xf59e0b, // Warm Amber
+                badgeBg: "bg-amber-600/90 border-amber-400",
+                dialogues: ["Uống ngụm trà sữa đã...", "Nghỉ tay 5 phút xả hơi...", "☕ Cà phê sáng tiếp năng lượng!"]
+            },
+            REPORTING: {
+                icon: "📄",
+                color: 0x10b981, // Emerald Green
+                badgeBg: "bg-emerald-600/90 border-emerald-400",
+                dialogues: ["Đang đi sang Sora Tower nộp báo cáo!", "Đã nộp xong hồ sơ cho HQ!"]
+            }
+        };
+
+        const officeComplaints = [
+            "Hôm nay lại OT nữa hả trời...",
+            "Sếp lại đổi brief vào cuối ngày rồi 😩",
+            "Ai đi mua trà sữa không? Cho xin 50% đường 30% đá!",
+            "KPI tháng này cao như ngọn núi vậy...",
+            "Deadline dí đằng sau lưng rồi nè!",
+            "Tối nay ăn gì đây mọi người ơi?",
+            "Má ơi lại crash file thiết kế nữa rồi!",
+            "Mệt quá, ra góc uống ly cà phê cái đã~",
+            "Trời ơi brief một đằng sếp đòi một nẻo!"
+        ];
+
+        activityTypes.CHATTING = {
+            icon: "💬",
+            color: 0xec4899,
+            badgeBg: "bg-pink-600/90 border-pink-400",
+            dialogues: []
+        };
+
+        const AGENT_NICK = {
+            claude_main: "Claude", sora_orch: "Điều Phối", trend_scout: "Săn Trend", video_editor: "Dựng Video",
+            talent_match: "Casting", costume_viz: "Costume", show_planner: "Đạo Diễn", tech_stage: "Kỹ Thuật",
+            booth_coordinator: "Quản Lý Booth", sponsor_hunter: "Săn Tài Trợ", ad_optimizer: "Ads",
+            legal_guard: "Pháp Lý", finance_tracker: "Kế Toán", hr_recruiter: "HR"
+        };
+
+        const AGENT_QUIPS = {
+            claude_main: ["Báo cáo xong 5 phòng ban rồi, ai pha giùm ly cà phê đi ☕", "Tôi duyệt nội dung kỹ lắm, đừng hòng lọt lỗi chính tả 🧐", "Founder mà thấy số liệu mô phỏng chắc cười xỉu 😆"],
+            sora_orch: ["Task nào cũng 'sắp xong', lịch của em khóc luôn 🗓️", "Em chia việc công bằng mà ai cũng thấy mình nhiều việc nhất 😅", "Họp 5 phút thôi... (nói dối) 🙃"],
+            trend_scout: ["Trend mới nổ! Quay nhanh trước khi nó nguội 🔥", "Quét 100 trend, 99 cái là mèo nhảy 🐱", "Kịch bản 15 giây, soạn mất 5 tiếng 🥲"],
+            video_editor: ["Render 99%... đứng yên 20 phút rồi 😭", "Thêm hiệu ứng lấp lánh nữa là máy bay màu ✨", "Ctrl+S, Ctrl+S, Ctrl+S... an toàn là trên hết 💾"],
+            talent_match: ["Cosplayer nào cũng 'chỉ cần chút xíu cát-xê' 💸", "Lịch diễn dày hơn cả tóc của Goku 😆", "Casting xong 8 người, ai cũng muốn làm nhân vật chính 🌟"],
+            costume_viz: ["Giáp 3D xong rồi, giờ chờ máy in... 3 ngày 🖨️", "Áo mecha nặng 10kg, cosplayer: 'em ổn... ổn...' 🤖", "Đo size xong mới biết nhầm đơn vị inch 😱"],
+            show_planner: ["Timeline chuẩn từng giây, trừ khi ca sĩ đến muộn 🎤", "Đạo diễn là người duy nhất không được nghỉ 🎬", "Phút 47 pháo hoa, phút 48 báo cháy 🎆"],
+            tech_stage: ["Đèn LED này sáng hơn tương lai của em ✨", "Tiếng ù micro là tính năng, không phải lỗi 🎧", "Dây cáp rối thế này là nghệ thuật đương đại 🧶"],
+            booth_coordinator: ["Booth chụp ảnh cần 6m, mặt bằng có 3m. Phép màu đâu? 🪄", "Sơ đồ gian hàng xếp xong, nhà tài trợ đổi ý 🙃", "Trà đá cho staff, nước suối cho khách, cà phê cho em ☕"],
+            sponsor_hunter: ["Gửi 50 proposal, rep 3 cái, 2 cái là spam 📬", "Nhà tài trợ hỏi 'có giảm giá không?' — em là người xin tiền mà 😅", "Chốt tài trợ xong, em xin nghỉ 1 giây 🎉"],
+            ad_optimizer: ["ROAS 4.8x! Cho em tăng ngân sách đi mà 🙏", "CPC giảm 1 đồng, em ăn mừng cả buổi 🎊", "Thuật toán ads hôm nay lại dỗi em rồi 🤖💢"],
+            legal_guard: ["Điều khoản số 14 có chữ 'tuy nhiên'... em nghi lắm 🕵️", "Nhạc 'nghe thì free', dùng thì phải trả 🎵", "Hợp đồng nào cũng ổn, trừ chữ ký 🖊️"],
+            finance_tracker: ["Tiền trà sữa tháng này cũng cần giải trình nhé 🧋", "Bảng tính đẹp như mơ, tiền thì như mây ☁️", "Đối soát đến 1 đồng lẻ vẫn tìm ra 🔍"],
+            hr_recruiter: ["Tuyển được staff rồi, thiếu mỗi... 3 Pikachu ⚡", "CV nào cũng 'chịu được áp lực', ngày đầu là xin nghỉ 😆", "Lịch ca sắp xong, rồi có người báo bận học 📚"]
+        };
+
+        const MEETING_QUIPS = ["Em có ý kiến! ✋", "Đồng ý với bạn bên trái 👍", "Cho mình ghi chú vào đã 📝", "Họp mà có bánh thì hay biết mấy 🍰", "Ai đang tắt mic vậy? 🎙️", "Slide thứ 2 lỗi font rồi 😅", "Tôi xin phép... đi lấy thêm cà phê ☕"];
+
+        // Kịch bản đối thoại theo cặp (0 = agent đứng trước trong khóa, 1 = agent đứng sau)
+        const PAIR_SCRIPTS = {
+            "trend_scout|video_editor": [[0, "Trend này đang nổ, dựng gấp trong 1 tiếng nha!"], [1, "1 tiếng? Em còn chưa render xong cái hôm qua 😭"], [0, "Thì thêm hiệu ứng lấp lánh cho nó mượt!"], [1, "Lấp lánh thì tốn thêm 3 tiếng đó ✨"]],
+            "sponsor_hunter|legal_guard": [[0, "Chốt xong nhà tài trợ rồi, soạn hợp đồng liền nha!"], [1, "Điều khoản 14 ghi logo to bằng cả sân khấu... xem lại nhé?"], [0, "Họ muốn vậy mà 🥲"], [1, "Để em viết 'kích thước hợp lý' cho an toàn 😌"]],
+            "ad_optimizer|finance_tracker": [[0, "ROAS đang đẹp, tăng ngân sách ads đi chị ơi!"], [1, "Em vừa duyệt xong, đừng xin thêm nữa 😤"], [0, "Chỉ thêm chút xíu à... bằng tiền trà sữa thôi!"], [1, "Trà sữa cũng nằm trong báo cáo nha."]],
+            "show_planner|tech_stage": [[0, "Đoạn drop nhạc cần đèn LED nổ tung sân khấu!"], [1, "Nổ vừa thôi, mình còn muốn giữ cái cầu dao 😅"], [0, "Cho thêm khói nữa nha!"], [1, "Báo cháy sẽ hát cùng luôn đó."]],
+            "talent_match|costume_viz": [[0, "Cosplayer cao 1m85 mà áo mecha đo cho 1m60 đó nha!"], [1, "Hả?! Em in 3D xong rồi mà 😱"], [0, "Thôi in thêm bộ cho Guest Star... cỡ XXL."], [1, "Máy in 3D đang khóc thầm..."]],
+            "claude_main|sora_orch": [[0, "Tổng hợp xong báo cáo 5 phòng ban, trình Sếp rồi nhé."], [1, "Em chia task rồi, nhưng phòng nào cũng nói 'sắp xong'."], [0, "'Sắp xong' là đơn vị đo thời gian khó nhất vũ trụ."], [1, "Em ghi vào lịch luôn: sắp xong = thứ Sáu 🗓️"]],
+            "hr_recruiter|talent_match": [[0, "Tuyển đủ staff rồi! Chỉ thiếu... 3 Pikachu."], [1, "Pikachu thì em có sẵn, mà đòi cát-xê bằng bánh tráng trộn."], [0, "Thương lượng được, thêm chút trà đá 🧋"]],
+            "booth_coordinator|sponsor_hunter": [[0, "Nhà tài trợ đòi booth ngay cửa vào, mà cửa chỉ rộng 3 mét 😵"], [1, "Thì xoay booth nghiêng 45 độ cho 'chiến lược'."], [0, "Nói như thể 3 mét sẽ thành 6 mét vậy..."]],
+            "trend_scout|ad_optimizer": [[0, "Video này đang nổ organic, đừng đốt tiền chạy quảng cáo!"], [1, "Nổ organic thì em chạy thêm cho nổ gấp đôi chứ 😎"], [0, "Ví của chị Kế Toán đang run kìa..."], [1, "Em chạy nhẹ thôi... nhẹ như búa tạ 🔨"]],
+            "legal_guard|talent_match": [[0, "Hợp đồng cosplayer có điều khoản 'không được ngủ gật trên sân khấu' chưa?"], [1, "Có luôn, thêm cả 'không được cười lúc đang khóc' 🎭"], [0, "Nhớ ký đủ 3 chỗ, đừng vẽ mèo vào chữ ký 🐱"], [1, "Vẽ mèo là phong cách riêng mà! 😆"]],
+            "finance_tracker|claude_main": [[0, "Báo cáo ngân sách xong, lệch đúng 1 đồng 🔍"], [1, "Một đồng thôi mà? Sếp sẽ không để ý đâu."], [0, "Em để ý. Em ngủ không được 😤"], [1, "Vậy mình ghi vào mục 'quỹ trà đá' 🍵"]],
+            "show_planner|booth_coordinator": [[0, "Luồng check-in 3.000 khách đi ngang qua booth nhé!"], [1, "Booth chụp ảnh cũng ở đó... khách sẽ đứng đó 2 tiếng 📸"], [0, "Vậy chuyển booth ra sau nhà vệ sinh?"], [1, "Đạo diễn ơi... 😑"]],
+            "video_editor|costume_viz": [[0, "Áo giáp 3D đẹp quá, cho em xin file để dựng teaser!"], [1, "File nặng 4GB, máy bạn chịu nổi không? 😏"], [0, "Quạt máy em kêu như máy bay cất cánh rồi ✈️"], [1, "Vậy chuẩn bị bay thôi! 🚀"]]
+        };
+
+        // Kịch bản chung ({x} = người nói trước, {y} = người nói sau)
+        const GENERIC_SCRIPTS = [
+            [[0, "{y} ơi, cho hỏi cái này chút!"], [1, "Nói nhanh nha, deadline đang đuổi theo mình rồi 🏃"], [0, "Brief hôm qua... sếp đổi lại rồi."], [1, "Lại nữa hả?! Cà phê đâu, cà phê đâu ☕"]],
+            [[0, "Nghe nói tuần này có tăng ca nha {y}."], [1, "Đừng nói nữa, tim tôi đập theo nhịp deadline rồi 💔"], [0, "Hay mình trốn đi uống trà sữa?"], [1, "Ý hay! Nhưng báo cáo để ai làm? 😅"]],
+            [[0, "{y} ơi, file này để đâu nhỉ?"], [1, "Trong thư mục 'Final_final_thật_sự_final_v3'."], [0, "Ủa có 2 thư mục như vậy mà 😵"], [1, "Thì lấy bản v3, chắc ăn nhất 😎"]],
+            [[0, "{y} thấy dự án Cyberpunk có ổn không?"], [1, "Ổn... nếu cà phê không hết giữa chừng."], [0, "Mình để dành sẵn 3 ly trong tủ rồi 🤫"], [1, "Vậy là đội mình thắng chắc! 🏆"]],
+            [[0, "Sếp vừa khen team mình đó {y}!"], [1, "Thật hả? Hay là sắp giao thêm việc?"], [0, "...Mình quên mất vế sau 😳"], [1, "Chuẩn bị tinh thần đi 😂"]]
+        ];
+
+        // --- 2. THREE.JS SCENE SETUP ---
+        let scene, camera, renderer, controls;
+        let buildingObjects = {};
+        let agentObjects = [];
+        let sparkles = null;
+        let convoCounter = 0;
+        let selectedKey = null;
+
+        const container = document.getElementById('webgl-container');
+        const labelsContainer = document.getElementById('labels-container');
+
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+            scene.fog = new THREE.FogExp2(0x0b0f19, 0.015);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(30, 25, 30);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05;
+            controls.minDistance = 10;
+            controls.maxDistance = 65;
+            controls.target.set(0, 0, 0);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 100;
+            const d = 25;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            const pinkLight = new THREE.PointLight(0xec4899, 3.0, 40);
+            pinkLight.position.set(0, 12, 0);
+            scene.add(pinkLight);
+
+            createDioramaPlatform();
+            createBuildingsAndAgents();
+            setupRaycaster();
+
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+            startAILifeCycle();
+        }
+
+        // --- 3b. SCENERY: cây kẹo, đèn đường, quán cà phê, đom đóm ---
+        function addScenery() {
+            const addTree = (x, z, color) => {
+                const g = new THREE.Group();
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.7, 8), new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.8 }));
+                trunk.position.y = 0.45; trunk.castShadow = true; g.add(trunk);
+                const crown = new THREE.Mesh(new THREE.SphereGeometry(0.46, 14, 12), new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 }));
+                crown.position.y = 1.1; crown.castShadow = true; g.add(crown);
+                g.position.set(x, 0.1, z);
+                scene.add(g);
+            };
+            for (let k = 0; k < 5; k++) {
+                for (let j = -1; j <= 1; j++) {
+                    const ang = (36 + 72 * k + j * 13) * Math.PI / 180;
+                    const rr = 16.3 + (j === 0 ? 0.2 : 0);
+                    addTree(Math.cos(ang) * rr, Math.sin(ang) * rr, ((k + j + 3) % 2) ? 0xf9a8d4 : 0x86efac);
+                }
+            }
+
+            for (let k = 0; k < 5; k++) {
+                const ang = (36 + 72 * k) * Math.PI / 180;
+                const lamp = new THREE.Group();
+                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.3, 8), new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6, roughness: 0.4 }));
+                post.position.y = 0.65; lamp.add(post);
+                const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+                bulb.position.y = 1.38; lamp.add(bulb);
+                lamp.position.set(Math.cos(ang) * 9, 0.1, Math.sin(ang) * 9);
+                scene.add(lamp);
+            }
+
+            // Góc cà phê (nơi nhân viên tụ tập)
+            const cafe = new THREE.Group();
+            const wood = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.6 });
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.07, 20), wood);
+            top.position.y = 0.8; top.castShadow = true; cafe.add(top);
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+            leg.position.y = 0.4; cafe.add(leg);
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+            foot.position.y = 0.03; cafe.add(foot);
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0xe2e8f0 }));
+            pole.position.set(0, 1.4, 0); cafe.add(pole);
+            const shade = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.5, 16), new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.5 }));
+            shade.position.y = 2.1; shade.castShadow = true; cafe.add(shade);
+            const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.14, 12), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+            cup.position.set(0.2, 0.9, 0.1); cafe.add(cup);
+            [-0.9, 0.9].forEach(sx => {
+                const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.4, 12), new THREE.MeshStandardMaterial({ color: 0xa78bfa }));
+                stool.position.set(sx, 0.25, 0); cafe.add(stool);
+            });
+            cafe.position.set(5.2, 0.1, 6.2);
+            scene.add(cafe);
+
+            // Đom đóm lấp lánh
+            const N = 120;
+            const pos = new Float32Array(N * 3);
+            for (let i = 0; i < N; i++) {
+                const r = 4 + Math.random() * 14, a = Math.random() * Math.PI * 2;
+                pos[i * 3] = Math.cos(a) * r;
+                pos[i * 3 + 1] = 1 + Math.random() * 9;
+                pos[i * 3 + 2] = Math.sin(a) * r;
+            }
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            sparkles = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff1c1, size: 0.14, transparent: true, opacity: 0.8, depthWrite: false }));
+            sparkles.raycast = function () {};
+            scene.add(sparkles);
+        }
+
+        // --- 3. DIORAMA PLATFORM CREATION ---
+        function createDioramaPlatform() {
+            const baseGeo = new THREE.CylinderGeometry(18, 19, 1.5, 64);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.2 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = -0.75;
+            base.receiveShadow = true;
+            scene.add(base);
+
+            const ringGeo = new THREE.CylinderGeometry(17.5, 17.5, 0.2, 64);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.y = 0.1;
+            ring.receiveShadow = true;
+            scene.add(ring);
+
+            const glowRingGeo = new THREE.TorusGeometry(17.8, 0.1, 16, 100);
+            const glowRingMat = new THREE.MeshBasicMaterial({ color: 0x6366f1 });
+            const glowRing = new THREE.Mesh(glowRingGeo, glowRingMat);
+            glowRing.rotation.x = Math.PI / 2;
+            glowRing.position.y = 0.05;
+            scene.add(glowRing);
+
+            const trackGeo = new THREE.RingGeometry(5.5, 6.2, 64);
+            const trackMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide });
+            const track = new THREE.Mesh(trackGeo, trackMat);
+            track.rotation.x = Math.PI / 2;
+            track.position.y = 0.21;
+            scene.add(track);
+            addScenery();
+        }
+
+        // --- 4. BUILDINGS & DYNAMIC AGENT AVATARS ---
+        function createBuildingsAndAgents() {
+            for (let key in departmentsData) {
+                const dept = departmentsData[key];
+                const isCenter = key === 'center';
+                
+                const house = createHouseMesh(dept.color, isCenter ? 3.8 : 2.6, isCenter ? 7.5 : 4.8, dept.title, key);
+                house.position.set(dept.pos.x, 0, dept.pos.z);
+                
+                if (!isCenter) {
+                    const angle = Math.atan2(dept.pos.z, dept.pos.x);
+                    house.rotation.y = -angle + Math.PI / 2;
+                }
+                
+                scene.add(house);
+                buildingObjects[key] = house;
+
+                create3DBuildingLabel(house, dept.title, dept.color, isCenter ? 13.6 : 9.4);
+
+                dept.agents.forEach((agentData, idx) => {
+                    const totalAgents = dept.agents.length;
+                    const spreadAngle = (idx - (totalAgents - 1) / 2) * 0.6;
+                    const distance = isCenter ? 4.2 : 3.2;
+                    
+                    const deptAngle = isCenter ? 0 : Math.atan2(dept.pos.z, dept.pos.x);
+                    const finalAngle = deptAngle + spreadAngle + Math.PI;
+
+                    const spawnX = dept.pos.x + Math.sin(finalAngle) * distance;
+                    const spawnZ = dept.pos.z + Math.cos(finalAngle) * distance;
+
+                    const agentObj = createAgentAvatar(spawnX, 0.2, spawnZ, dept.color, agentData, dept);
+                    agentObjects.push(agentObj);
+                });
+            }
+        }
+
+        function createHouseMesh(colorHex, radius, height, name, key) {
+            const group = new THREE.Group();
+            const spinners = [];
+
+            const baseGeo = new THREE.CylinderGeometry(radius * 1.25, radius * 1.4, height * 0.2, 16);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.2, metalness: 0.8 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = height * 0.1;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            group.add(base);
+
+            const bodyGeo = new THREE.CylinderGeometry(radius * 0.85, radius * 1.1, height * 0.7, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.95
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = height * 0.55;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI) / 2;
+                const pillarGeo = new THREE.BoxGeometry(radius * 0.1, height * 0.72, radius * 0.1);
+                const pillarMat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 0.8, roughness: 0.1 });
+                const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+                pillar.position.set(Math.cos(angle) * (radius * 0.95), height * 0.55, Math.sin(angle) * (radius * 0.95));
+                group.add(pillar);
+            }
+
+            // Cửa sổ phát sáng trên 8 mặt tòa nhà
+            const bodyBottom = height * 0.2, bodyH = height * 0.7;
+            const slope = Math.atan((radius * 0.25) / bodyH);
+            const winGeo = new THREE.BoxGeometry(radius * 0.22, height * 0.065, 0.06);
+            const litMat = new THREE.MeshBasicMaterial({ color: 0xfde68a });
+            const colMat = new THREE.MeshBasicMaterial({ color: colorHex });
+            const dimMat = new THREE.MeshBasicMaterial({ color: 0x334155 });
+            [0.22, 0.5, 0.78].forEach(t => {
+                const R = radius * 1.1 - t * radius * 0.25;
+                const ap = R * Math.cos(Math.PI / 8) + 0.02;
+                const yy = bodyBottom + bodyH * t;
+                for (let k = 0; k < 8; k++) {
+                    const th = (k + 0.5) * Math.PI / 4;
+                    const r = Math.random();
+                    const win = new THREE.Mesh(winGeo, r < 0.55 ? litMat : (r < 0.8 ? colMat : dimMat));
+                    win.rotation.order = 'YXZ';
+                    win.rotation.y = th;
+                    win.rotation.x = -slope;
+                    win.position.set(Math.sin(th) * ap, yy, Math.cos(th) * ap);
+                    group.add(win);
+                }
+            });
+
+            // Cửa chính phát sáng + đèn lồng
+            {
+                const t = 0.08, R = radius * 1.1 - t * radius * 0.25, ap = R * Math.cos(Math.PI / 8) + 0.03;
+                const th = Math.PI / 8;
+                const door = new THREE.Mesh(new THREE.BoxGeometry(radius * 0.42, height * 0.17, 0.08),
+                    new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 0.9 }));
+                door.rotation.order = 'YXZ'; door.rotation.y = th; door.rotation.x = -slope;
+                door.position.set(Math.sin(th) * ap, bodyBottom + height * 0.09, Math.cos(th) * ap);
+                group.add(door);
+                const lantern = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.07, 10, 10), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+                lantern.position.set(Math.sin(th) * (ap + 0.1), bodyBottom + height * 0.22, Math.cos(th) * (ap + 0.1));
+                group.add(lantern);
+            }
+
+            const roofGeo = new THREE.ConeGeometry(radius * 1.05, height * 0.45, 8);
+            const roofMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.1, metalness: 0.4, emissive: colorHex, emissiveIntensity: 0.5 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = height * 1.1;
+            roof.castShadow = true;
+            group.add(roof);
+
+            const gem = new THREE.Mesh(new THREE.OctahedronGeometry(radius * 0.25), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            gem.position.y = height * 1.38;
+            gem.userData.baseY = gem.position.y;
+            group.add(gem);
+            spinners.push(gem);
+
+            const ring = new THREE.Mesh(new THREE.RingGeometry(radius * 1.4, radius * 1.6, 32), new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide }));
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.05;
+            group.add(ring);
+
+            // Chùm sáng từ nóc nhà
+            const beam = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.8, height * 1.1, 20, 1, true),
+                new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+            beam.rotation.x = Math.PI;
+            beam.position.y = height * 1.38 + height * 0.55;
+            beam.raycast = function () {};
+            group.add(beam);
+
+            // Biểu tượng xoay trên nóc theo từng phòng ban
+            const prop = new THREE.Group();
+            const glow = (c, i) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i || 0.8, roughness: 0.3 });
+            const u = radius * 0.5;
+            if (key === 'creative') {
+                const tri = new THREE.Mesh(new THREE.CylinderGeometry(u, u, u * 0.25, 3), glow(colorHex, 1));
+                tri.rotation.x = Math.PI / 2; tri.rotation.z = Math.PI / 2;
+                prop.add(tri);
+                const lens = new THREE.Mesh(new THREE.TorusGeometry(u * 1.3, u * 0.07, 8, 28), glow(0xffffff, 0.6));
+                prop.add(lens);
+            } else if (key === 'cosplay') {
+                const band = new THREE.Mesh(new THREE.TorusGeometry(u * 0.9, u * 0.12, 8, 24), glow(0xfbbf24, 0.9));
+                band.rotation.x = Math.PI / 2; prop.add(band);
+                for (let i = 0; i < 5; i++) {
+                    const a = i * Math.PI * 2 / 5;
+                    const spike = new THREE.Mesh(new THREE.ConeGeometry(u * 0.2, u * 0.7, 8), glow(0xfbbf24, 0.9));
+                    spike.position.set(Math.cos(a) * u * 0.9, u * 0.4, Math.sin(a) * u * 0.9);
+                    prop.add(spike);
+                }
+            } else if (key === 'event') {
+                for (let i = -1; i <= 1; i++) {
+                    const cone = new THREE.Mesh(new THREE.ConeGeometry(u * 0.5, u * 2.4, 14, 1, true),
+                        new THREE.MeshBasicMaterial({ color: i === 0 ? 0xffffff : colorHex, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+                    cone.position.set(i * u * 0.8, u * 1.0, 0);
+                    cone.rotation.z = -i * 0.35;
+                    cone.raycast = function () {};
+                    prop.add(cone);
+                }
+                const lamp = new THREE.Mesh(new THREE.SphereGeometry(u * 0.3, 12, 12), glow(0xffffff, 1));
+                prop.add(lamp);
+            } else if (key === 'business') {
+                [[-0.5, 0.45], [0, 0.8], [0.5, 1.2]].forEach(([x, h]) => {
+                    const bar = new THREE.Mesh(new THREE.BoxGeometry(u * 0.35, u * h * 1.3, u * 0.35), glow(0x34d399, 0.9));
+                    bar.position.set(x * u * 1.1, u * h * 0.65, 0);
+                    prop.add(bar);
+                });
+                const arrow = new THREE.Mesh(new THREE.ConeGeometry(u * 0.3, u * 0.55, 3), glow(0xffffff, 0.9));
+                arrow.position.set(u * 0.6, u * 1.9, 0); prop.add(arrow);
+            } else if (key === 'operations') {
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.06, u * 0.06, u * 1.7, 8), glow(0xc7d2fe, 0.7));
+                pole.position.y = u * 0.8; prop.add(pole);
+                const bar = new THREE.Mesh(new THREE.BoxGeometry(u * 2.0, u * 0.08, u * 0.08), glow(0xc7d2fe, 0.7));
+                bar.position.y = u * 1.6; prop.add(bar);
+                [-1, 1].forEach(sx => {
+                    const pan = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.42, u * 0.42, u * 0.06, 16), glow(0x818cf8, 0.9));
+                    pan.position.set(sx * u * 0.95, u * 1.05, 0); prop.add(pan);
+                    const chain = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.02, u * 0.02, u * 0.55, 6), glow(0xc7d2fe, 0.5));
+                    chain.position.set(sx * u * 0.95, u * 1.33, 0); prop.add(chain);
+                });
+            } else {
+                const r1 = new THREE.Mesh(new THREE.TorusGeometry(u * 1.1, u * 0.06, 8, 36), glow(colorHex, 1));
+                r1.rotation.x = Math.PI / 2.4; prop.add(r1);
+                const r2 = new THREE.Mesh(new THREE.TorusGeometry(u * 1.5, u * 0.05, 8, 36), glow(0xffffff, 0.7));
+                r2.rotation.x = -Math.PI / 2.8; prop.add(r2);
+                const core = new THREE.Mesh(new THREE.IcosahedronGeometry(u * 0.5, 0), glow(0xf9a8d4, 1));
+                prop.add(core);
+            }
+            prop.position.y = height * 1.6;
+            prop.userData.baseY = prop.position.y;
+            group.add(prop);
+            spinners.push(prop);
+
+            group.userData.spinners = spinners;
+            return group;
+        }
+
+        function create3DBuildingLabel(buildingObj, title, colorHex, heightOffset) {
+            const labelEl = document.createElement('div');
+            labelEl.className = 'agent-label flex flex-col items-center pointer-events-none';
+            const hexColorStr = '#' + colorHex.toString(16).padStart(6, '0');
+            labelEl.innerHTML = `
+                <div class="px-3 py-1 rounded-xl bg-slate-900/90 border border-white/20 text-xs font-bold text-white shadow-2xl flex items-center gap-2 backdrop-blur-md">
+                    <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${hexColorStr};"></span>
+                    <span>${title}</span>
+                </div>
+            `;
+            labelsContainer.appendChild(labelEl);
+
+            buildingObj.userData = Object.assign(buildingObj.userData || {}, {
+                labelEl: labelEl,
+                heightOffset: heightOffset
+            });
+        }
+
+        function hashStr(str) {
+            let h = 2166136261;
+            for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+            return h >>> 0;
+        }
+
+        function createAgentAvatar(x, y, z, colorHex, agentData, deptData) {
+            const agentGroup = new THREE.Group();
+            const hsh = hashStr(agentData.id);
+            const skinPal = [0xffdfc4, 0xf5cba7, 0xe8b996, 0xc68642, 0x8d5524];
+            const hairPal = [colorHex, 0x2b1b17, 0xf5d0a9, 0x8b5cf6, 0xec4899, 0x0ea5e9, 0xf1f5f9, 0xdc2626];
+            const skinCol = skinPal[hsh % 5];
+            const hairCol = hairPal[(hsh >> 3) % 8];
+            const hairStyle = (hsh >> 6) % 4;
+            const acc = (hsh >> 9) % 4;
+
+            const mk = (geo, color, opts) => {
+                const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial(Object.assign({ color: color, roughness: 0.55 }, opts || {})));
+                m.castShadow = true;
+                return m;
+            };
+            const mkLED = (r, color) => {
+                const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 10),
+                    new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.9, roughness: 0.1 }));
+                return m;
+            };
+            const suit = 0x1e293b;
+            const leds = [];
+
+            // Thân + áo sơ mi + cà vạt
+            const torso = mk(new THREE.CylinderGeometry(0.2, 0.24, 0.38, 14), suit);
+            torso.position.y = 0.5; agentGroup.add(torso);
+            const shirt = mk(new THREE.BoxGeometry(0.12, 0.3, 0.02), 0xffffff);
+            shirt.position.set(0, 0.52, 0.225); agentGroup.add(shirt);
+            const tie = mk(new THREE.BoxGeometry(0.05, 0.2, 0.02), colorHex, { emissive: colorHex, emissiveIntensity: 0.4 });
+            tie.position.set(0, 0.5, 0.238); agentGroup.add(tie);
+            const chestLED = mkLED(0.035, activityTypes.WORKING.color);
+            chestLED.position.set(-0.1, 0.57, 0.225); agentGroup.add(chestLED);
+            leds.push(chestLED);
+
+            // Tay (pivot ở vai)
+            const makeArm = (sx) => {
+                const piv = new THREE.Group();
+                piv.position.set(sx * 0.27, 0.64, 0);
+                const arm = mk(new THREE.CylinderGeometry(0.05, 0.045, 0.26, 8), suit);
+                arm.position.y = -0.13; piv.add(arm);
+                const hand = mk(new THREE.SphereGeometry(0.06, 10, 10), skinCol);
+                hand.position.y = -0.28; piv.add(hand);
+                piv.rotation.z = sx * 0.15;
+                agentGroup.add(piv);
+                return piv;
+            };
+            const armL = makeArm(-1), armR = makeArm(1);
+
+            // Chân + giày thể thao màu phòng ban
+            const makeLeg = (sx) => {
+                const piv = new THREE.Group();
+                piv.position.set(sx * 0.1, 0.31, 0);
+                const leg = mk(new THREE.CylinderGeometry(0.06, 0.055, 0.2, 8), 0x0f172a);
+                leg.position.y = -0.1; piv.add(leg);
+                const shoe = mk(new THREE.SphereGeometry(0.085, 10, 10), colorHex);
+                shoe.scale.set(1, 0.6, 1.45);
+                shoe.position.set(0, -0.2, 0.03); piv.add(shoe);
+                agentGroup.add(piv);
+                return piv;
+            };
+            const legL = makeLeg(-1), legR = makeLeg(1);
+
+            // Đầu chibi (pivot ở tâm đầu)
+            const head = new THREE.Group();
+            head.position.y = 1.12;
+            agentGroup.add(head);
+
+            const skull = mk(new THREE.SphereGeometry(0.46, 28, 24), skinCol, { roughness: 0.6 });
+            skull.scale.set(1, 0.95, 1); head.add(skull);
+            [-1, 1].forEach(sx => {
+                const ear = mk(new THREE.SphereGeometry(0.07, 8, 8), skinCol);
+                ear.position.set(sx * 0.46, 0, 0); head.add(ear);
+            });
+
+            // Mắt to + điểm sáng + má hồng + miệng
+            const eyes = [];
+            [-1, 1].forEach(sx => {
+                const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 12), new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.2 }));
+                eye.scale.set(1, 1.35, 0.55);
+                eye.position.set(sx * 0.17, -0.02, 0.415);
+                head.add(eye); eyes.push(eye);
+                const shine = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                shine.position.set(sx * 0.17 + 0.025, 0.025, 0.455);
+                head.add(shine);
+                const blush = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), new THREE.MeshBasicMaterial({ color: 0xff9fb2, transparent: true, opacity: 0.75 }));
+                blush.scale.set(1, 0.6, 0.25);
+                blush.position.set(sx * 0.28, -0.1, 0.345);
+                head.add(blush);
+            });
+            const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.011, 6, 14, Math.PI), new THREE.MeshBasicMaterial({ color: 0x7f1d1d }));
+            mouth.rotation.z = Math.PI;
+            mouth.position.set(0, -0.09, 0.443);
+            head.add(mouth);
+
+            // Tóc: nón tóc + mái + kiểu riêng
+            const hair = mk(new THREE.SphereGeometry(0.49, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.52), hairCol, { roughness: 0.35 });
+            hair.position.set(0, 0, -0.02);
+            hair.rotation.x = -0.5;
+            head.add(hair);
+            [-0.2, 0, 0.2].forEach((bx, i) => {
+                const bang = mk(new THREE.SphereGeometry(0.16, 12, 10), hairCol, { roughness: 0.35 });
+                bang.scale.set(1.1, 0.55, 0.6);
+                bang.position.set(bx, 0.3, 0.3);
+                bang.rotation.z = (i - 1) * -0.25;
+                head.add(bang);
+            });
+            if (hairStyle === 0) {
+                [-1, 1].forEach(sx => {
+                    const flap = mk(new THREE.SphereGeometry(0.17, 12, 12), hairCol, { roughness: 0.35 });
+                    flap.scale.set(0.7, 1.5, 0.9);
+                    flap.position.set(sx * 0.4, -0.1, -0.05); head.add(flap);
+                });
+            } else if (hairStyle === 1) {
+                for (let i = 0; i < 5; i++) {
+                    const ang = i * Math.PI * 2 / 5;
+                    const sp = mk(new THREE.ConeGeometry(0.1, 0.32, 8), hairCol, { roughness: 0.35 });
+                    sp.position.set(Math.sin(ang) * 0.2, 0.47, Math.cos(ang) * 0.2 - 0.05);
+                    sp.rotation.z = -Math.sin(ang) * 0.6;
+                    sp.rotation.x = Math.cos(ang) * 0.6;
+                    head.add(sp);
+                }
+            } else if (hairStyle === 2) {
+                [-1, 1].forEach(sx => {
+                    const tail = mk(new THREE.SphereGeometry(0.13, 12, 12), hairCol, { roughness: 0.35 });
+                    tail.scale.set(1, 2.4, 1);
+                    tail.position.set(sx * 0.5, -0.08, -0.05); head.add(tail);
+                    const bow = mk(new THREE.SphereGeometry(0.07, 8, 8), colorHex, { emissive: colorHex, emissiveIntensity: 0.5 });
+                    bow.position.set(sx * 0.44, 0.22, -0.02); head.add(bow);
+                });
+            } else {
+                const bun = mk(new THREE.SphereGeometry(0.18, 14, 14), hairCol, { roughness: 0.35 });
+                bun.position.set(0, 0.54, -0.12); head.add(bun);
+                const ahoge = mk(new THREE.ConeGeometry(0.03, 0.22, 6), hairCol, { roughness: 0.35 });
+                ahoge.position.set(0, 0.52, 0.1); ahoge.rotation.x = 0.6; head.add(ahoge);
+            }
+
+            // Phụ kiện theo từng nhân vật
+            if (acc === 0) {
+                const band = mk(new THREE.TorusGeometry(0.52, 0.025, 8, 28, Math.PI), 0x334155);
+                head.add(band);
+                [-1, 1].forEach(sx => {
+                    const cup = mk(new THREE.SphereGeometry(0.1, 10, 10), 0x334155);
+                    cup.scale.set(0.6, 1, 1);
+                    cup.position.set(sx * 0.52, 0, 0); head.add(cup);
+                });
+                const earLED = mkLED(0.045, activityTypes.WORKING.color);
+                earLED.position.set(0.58, 0, 0.02); head.add(earLED);
+                leds.push(earLED);
+            } else if (acc === 1) {
+                [-1, 1].forEach(sx => {
+                    const lens = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.014, 8, 20), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+                    lens.position.set(sx * 0.17, -0.02, 0.457); head.add(lens);
+                });
+                const bridge = mk(new THREE.BoxGeometry(0.08, 0.014, 0.014), 0x1e293b);
+                bridge.position.set(0, -0.02, 0.457); head.add(bridge);
+            } else if (acc === 2) {
+                [-1, 1].forEach(sx => {
+                    const ear = mk(new THREE.ConeGeometry(0.13, 0.26, 4), hairCol, { roughness: 0.35 });
+                    ear.position.set(sx * 0.28, 0.43, -0.02);
+                    ear.rotation.z = -sx * 0.35; head.add(ear);
+                    const inner = mk(new THREE.ConeGeometry(0.07, 0.15, 4), 0xf9a8d4);
+                    inner.position.set(sx * 0.28, 0.42, 0.04);
+                    inner.rotation.z = -sx * 0.35; head.add(inner);
+                });
+            } else {
+                const star = mk(new THREE.OctahedronGeometry(0.07), colorHex, { emissive: colorHex, emissiveIntensity: 0.9 });
+                star.position.set(0.3, 0.3, 0.28); head.add(star);
+            }
+
+            // Vòng sáng dưới chân
+            const haloGeo = new THREE.RingGeometry(0.4, 0.52, 32);
+            const haloMat = new THREE.MeshBasicMaterial({ color: activityTypes.WORKING.color, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+            const halo = new THREE.Mesh(haloGeo, haloMat);
+            halo.rotation.x = Math.PI / 2;
+            halo.position.y = 0.02;
+            agentGroup.add(halo);
+
+            agentGroup.position.set(x, y, z);
+            scene.add(agentGroup);
+
+            // HTML Floating Dynamic Status Label
+            const labelEl = document.createElement('div');
+            labelEl.className = 'agent-label flex flex-col items-center gap-1';
+            labelEl.innerHTML = `
+                <div class="status-badge px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-lg border backdrop-blur-md flex items-center gap-1 ${activityTypes.WORKING.badgeBg}">
+                    <span class="status-icon">${activityTypes.WORKING.icon}</span>
+                </div>
+                <div class="px-2 py-0.5 rounded-full bg-black/85 border border-white/20 text-[10px] font-bold text-white shadow-lg flex items-center gap-1.5">
+                    <span class="status-dot w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                    <span class="role-text">${agentData.role}</span>
+                </div>
+            `;
+            labelsContainer.appendChild(labelEl);
+
+            return {
+                group: agentGroup,
+                visorMesh: chestLED,
+                ledMeshes: leds,
+                haloMesh: halo,
+                parts: { armL: armL, armR: armR, legL: legL, legR: legR, head: head, mouth: mouth, eyes: eyes },
+                dept: deptData,
+                data: agentData,
+                labelEl: labelEl,
+                homePos: { x: x, z: z },
+                initialY: y,
+                lastPos: { x: x, z: z },
+                walkPhase: 0,
+                talkUntil: 0,
+                nextBlink: performance.now() + 1500 + Math.random() * 3500,
+                bubble: null,
+                convoId: 0,
+                convoTween: null,
+                state: "IDLE",
+                activityKey: "WORKING",
+                speed: Math.random() * 0.05 + 0.02
+            };
+        }
+
+        // Set Dynamic Activity State for Avatar (Updates Visor LED, Halo Ring, Icon Badge & Speech)
+        function setAgentActivity(agent, activityKey, triggerBubble = true) {
+            const act = activityTypes[activityKey];
+            if (!act) return;
+
+            agent.activityKey = activityKey;
+
+            // 1. Change 3D Visor LED & Feet Halo Ring Light Color
+            (agent.ledMeshes || [agent.visorMesh]).forEach(m => { m.material.color.setHex(act.color); m.material.emissive.setHex(act.color); });
+            agent.haloMesh.material.color.setHex(act.color);
+
+            // 2. Update Dynamic HTML Badge Icon & Border
+            const badgeEl = agent.labelEl.querySelector('.status-badge');
+            const iconEl = agent.labelEl.querySelector('.status-icon');
+            if (badgeEl && iconEl) {
+                badgeEl.className = `status-badge px-2 py-0.5 rounded-full text-xs font-bold text-white shadow-lg border backdrop-blur-md flex items-center gap-1 ${act.badgeBg}`;
+                iconEl.innerText = act.icon;
+            }
+
+            // 3. Optional Activity Speech/Thought Bubble
+            if (triggerBubble && act.dialogues) {
+                const text = act.dialogues[Math.floor(Math.random() * act.dialogues.length)];
+                showSpeechBubble(agent.group, `${act.icon} ${text}`);
+            }
+        }
+
+        // --- 5. AI AGENT BEHAVIORS & DYNAMIC ACTIVITIES ---
+        function roamAroundHome(agent) {
+            agent.state = "ROAMING";
+            setAgentActivity(agent, "WORKING", false);
+
+            const radius = 1.8;
+            const targetX = agent.homePos.x + (Math.random() - 0.5) * radius;
+            const targetZ = agent.homePos.z + (Math.random() - 0.5) * radius;
+
+            agent.group.lookAt(targetX, agent.group.position.y, targetZ);
+
+            new TWEEN.Tween(agent.group.position)
+                .to({ x: targetX, z: targetZ }, 2000 + Math.random() * 1500)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .onComplete(() => {
+                    agent.state = "IDLE";
+                })
+                .start();
+        }
+
+        function startAILifeCycle() {
+            // Cycle through dynamic states (WORKING ⌨️, THINKING 💡, RESTING ☕)
+            setInterval(() => {
+                agentObjects.forEach(agent => {
+                    if (agent.state === "IDLE") {
+                        const rand = Math.random();
+                        if (rand < 0.35) {
+                            roamAroundHome(agent);
+                        } else if (rand < 0.6) {
+                            // Switch to THINKING state
+                            setAgentActivity(agent, "THINKING");
+                        } else if (rand < 0.8) {
+                            // Switch to RESTING state
+                            setAgentActivity(agent, "RESTING");
+                        } else {
+                            // Switch to WORKING state
+                            setAgentActivity(agent, "WORKING");
+                        }
+                    }
+                });
+            }, 6000);
+
+            // Tán gẫu theo cặp (hai nhân viên cùng liên kết công việc)
+            setInterval(() => { if (Math.random() < 0.85) startConversation(); }, 9000);
+            setTimeout(() => startConversation(), 2500);
+
+            // Periodic Gathering & Complaints
+            setInterval(() => {
+                if (Math.random() < 0.5) {
+                    triggerOfficeGathering();
+                }
+            }, 14000);
+
+            // Periodic Random Complaints
+            setInterval(() => {
+                const idleAgents = agentObjects.filter(a => a.state === "IDLE");
+                if (idleAgents.length > 0 && Math.random() < 0.6) {
+                    const randomAgent = idleAgents[Math.floor(Math.random() * idleAgents.length)];
+                    showSpeechBubble(randomAgent.group, randomQuipFor(randomAgent));
+                }
+            }, 5000);
+        }
+
+        function triggerOfficeGathering() {
+            const idleAgents = agentObjects.filter(a => a.state === "IDLE");
+            if (idleAgents.length < 2) return;
+
+            const count = Math.min(idleAgents.length, 2 + Math.floor(Math.random() * 2));
+            const participants = [];
+            for (let i = 0; i < count; i++) {
+                const idx = Math.floor(Math.random() * idleAgents.length);
+                participants.push(idleAgents.splice(idx, 1)[0]);
+            }
+
+            const gatherSpot = { 
+                x: (Math.random() - 0.5) * 6, 
+                z: 6 + (Math.random() - 0.5) * 4 
+            };
+
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                statusText.innerText = `[TỤ TẬP VĂN PHÒNG] Nhóm nhân viên đang ra góc uống cà phê/trà sữa & trao đổi công việc!`;
+            }
+
+            participants.forEach((agent, idx) => {
+                agent.state = "GATHERING";
+                setAgentActivity(agent, "RESTING", false);
+
+                const offset = (idx - 0.5) * 1.5;
+                const targetX = gatherSpot.x + offset;
+                const targetZ = gatherSpot.z;
+
+                agent.group.lookAt(targetX, agent.group.position.y, targetZ);
+
+                new TWEEN.Tween(agent.group.position)
+                    .to({ x: targetX, z: targetZ }, 3000)
+                    .easing(TWEEN.Easing.Cubic.Out)
+                    .onComplete(() => {
+                        agent.group.lookAt(gatherSpot.x, agent.group.position.y, gatherSpot.z);
+                        
+                        setTimeout(() => {
+                            showSpeechBubble(agent.group, `☕ ${randomQuipFor(agent)}`);
+                        }, idx * 1200 + 300);
+                    })
+                    .start();
+            });
+
+            setTimeout(() => {
+                participants.forEach(agent => {
+                    agent.group.lookAt(agent.homePos.x, agent.group.position.y, agent.homePos.z);
+                    new TWEEN.Tween(agent.group.position)
+                        .to({ x: agent.homePos.x, z: agent.homePos.z }, 3500)
+                        .easing(TWEEN.Easing.Cubic.InOut)
+                        .onComplete(() => { 
+                            agent.state = "IDLE"; 
+                            setAgentActivity(agent, "WORKING", false);
+                        })
+                        .start();
+                });
+                const statusTextEnd = document.getElementById('status-text');
+                if (statusTextEnd) {
+                    statusTextEnd.innerText = `Các AI Agent đang tự do trao đổi ý tưởng & đi sang Sora Tower nộp báo cáo.`;
+                }
+            }, 8500);
+        }
+
+        function deliverReportToHQ(agent) {
+            agent.state = "WALKING_TO_HQ";
+            setAgentActivity(agent, "REPORTING", false);
+            
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                statusText.innerText = `[BÁO CÁO] ${agent.data.role} (${agent.dept.title}) đang đi sang Sora Tower nộp báo cáo!`;
+            }
+
+            showSpeechBubble(agent.group, `📄 Báo cáo nè, mong sếp duyệt giúp!`);
+
+            const hqEntrance = { x: (Math.random() - 0.5) * 2, z: 3.8 };
+            agent.group.lookAt(hqEntrance.x, agent.group.position.y, hqEntrance.z);
+
+            new TWEEN.Tween(agent.group.position)
+                .to({ x: hqEntrance.x, z: hqEntrance.z }, 4500)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onComplete(() => {
+                    showSpeechBubble(agent.group, `✅ Đã giao xong, về chỗ làm tiếp!`);
+                    
+                    setTimeout(() => {
+                        agent.group.lookAt(agent.homePos.x, agent.group.position.y, agent.homePos.z);
+                        new TWEEN.Tween(agent.group.position)
+                            .to({ x: agent.homePos.x, z: agent.homePos.z }, 4500)
+                            .easing(TWEEN.Easing.Cubic.InOut)
+                            .onComplete(() => {
+                                agent.state = "IDLE";
+                                setAgentActivity(agent, "WORKING", false);
+                                const statusTextEnd = document.getElementById('status-text');
+                                if (statusTextEnd) {
+                                    statusTextEnd.innerText = `Các AI Agent đang tự do trao đổi ý tưởng & đi sang Sora Tower nộp báo cáo.`;
+                                }
+                            })
+                            .start();
+                    }, 2500);
+                })
+                .start();
+        }
+
+        function triggerMeetingEvent() {
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                statusText.innerText = `[HỌP ĐỘI NGŨ] Tất cả AI Agents đang di chuyển đến Quảng trường Trung tâm!`;
+            }
+
+            agentObjects.forEach((agent, index) => {
+                agent.state = "MEETING";
+                if (agent.convoTween) agent.convoTween.stop();
+                setAgentActivity(agent, "THINKING", false);
+
+                const angle = (index / agentObjects.length) * Math.PI * 2;
+                const meetingX = Math.cos(angle) * 4.5;
+                const meetingZ = Math.sin(angle) * 4.5;
+
+                agent.group.lookAt(meetingX, agent.group.position.y, meetingZ);
+
+                new TWEEN.Tween(agent.group.position)
+                    .to({ x: meetingX, z: meetingZ }, 3500)
+                    .easing(TWEEN.Easing.Cubic.Out)
+                    .onComplete(() => {
+                        agent.group.lookAt(0, agent.group.position.y, 0);
+                        if (index === 0) {
+                            showSpeechBubble(agent.group, `💡 Thảo luận tối ưu hóa Festival Cosplay 2026!`);
+                        } else {
+                            setTimeout(() => { if (agent.state === "MEETING") showSpeechBubble(agent.group, meetingQuipFor(agent)); }, 800 + Math.random() * 5000);
+                        }
+                    })
+                    .start();
+            });
+
+            setTimeout(() => {
+                agentObjects.forEach(agent => {
+                    agent.group.lookAt(agent.homePos.x, agent.group.position.y, agent.homePos.z);
+                    new TWEEN.Tween(agent.group.position)
+                        .to({ x: agent.homePos.x, z: agent.homePos.z }, 4000)
+                        .easing(TWEEN.Easing.Cubic.InOut)
+                        .onComplete(() => { 
+                            agent.state = "IDLE"; 
+                            setAgentActivity(agent, "WORKING", false);
+                        })
+                        .start();
+                });
+                const statusTextEnd = document.getElementById('status-text');
+                if (statusTextEnd) {
+                    statusTextEnd.innerText = `Các AI Agent đã hoàn tất cuộc họp và trở về phòng ban.`;
+                }
+            }, 9000);
+        }
+
+        function sendAgentToDeliverReport() {
+            if (!selectedKey || selectedKey === 'center') {
+                alert("Vui lòng chọn 1 Phòng ban cụ thể trên menu để gửi AI đi nộp báo cáo!");
+                return;
+            }
+            const deptAgents = agentObjects.filter(a => a.dept.title === departmentsData[selectedKey].title && a.state === "IDLE");
+            if (deptAgents.length > 0) {
+                deliverReportToHQ(deptAgents[0]);
+            } else {
+                alert("AI Agent của phòng ban này đang bận!");
+            }
+        }
+
+        function showSpeechBubble(agentMesh, text, ms) {
+            const agent = agentObjects.find(a => a.group === agentMesh);
+            const dur = ms || Math.min(4600, Math.max(2600, 1600 + String(text).length * 55));
+            const el = document.createElement('div');
+            el.className = 'speech-bubble';
+            const color = agent ? '#' + agent.dept.color.toString(16).padStart(6, '0') : '#a78bfa';
+            el.style.setProperty('--bc', color);
+            const nm = agent ? (AGENT_NICK[agent.data.id] || agent.data.role) : '';
+            el.innerHTML = (nm ? `<div class="bubble-name">${esc(nm)}</div>` : '') + `<div>${esc(text)}</div>`;
+            labelsContainer.appendChild(el);
+
+            if (agent) {
+                if (agent.bubble && agent.bubble.el.parentNode) agent.bubble.el.parentNode.removeChild(agent.bubble.el);
+                agent.bubble = { el: el };
+                agent.talkUntil = performance.now() + dur - 300;
+            } else {
+                el.style.left = '50%';
+                el.style.top = '30%';
+            }
+
+            setTimeout(() => {
+                el.classList.add('fade');
+                setTimeout(() => {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                    if (agent && agent.bubble && agent.bubble.el === el) agent.bubble = null;
+                }, 350);
+            }, dur);
+        }
+
+        // --- 5b. NHÂN VIÊN TÁN GẪU: tự tìm nhau, ra điểm hẹn và trò chuyện ---
+        function agentRec(id) { return agentObjects.find(a => a.data.id === id); }
+        function nickOf(agent) { return AGENT_NICK[agent.data.id] || agent.data.role; }
+        function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+        function randomQuipFor(agent) {
+            const own = AGENT_QUIPS[agent.data.id];
+            if (own && own.length && Math.random() < 0.65) return pick(own);
+            return pick(officeComplaints);
+        }
+
+        function meetingQuipFor(agent) {
+            const own = AGENT_QUIPS[agent.data.id];
+            if (own && own.length && Math.random() < 0.4) return pick(own);
+            return pick(MEETING_QUIPS);
+        }
+
+        function findScript(a, b) {
+            const k1 = a.data.id + '|' + b.data.id, k2 = b.data.id + '|' + a.data.id;
+            if (PAIR_SCRIPTS[k1]) return { lines: PAIR_SCRIPTS[k1], first: a, second: b };
+            if (PAIR_SCRIPTS[k2]) return { lines: PAIR_SCRIPTS[k2], first: b, second: a };
+            return { lines: pick(GENERIC_SCRIPTS), first: a, second: b };
+        }
+
+        function startConversation() {
+            const idle = agentObjects.filter(a => a.state === "IDLE");
+            if (idle.length < 2) return false;
+            const shuffled = idle.slice().sort(() => Math.random() - 0.5);
+            for (const a of shuffled) {
+                const partners = (a.data.linkedWith || []).map(agentRec).filter(b => b && b !== a && b.state === "IDLE");
+                if (!partners.length) continue;
+                runConversation(a, pick(partners));
+                return true;
+            }
+            return false;
+        }
+
+        function runConversation(a, b) {
+            const id = ++convoCounter;
+            [a, b].forEach(x => { x.state = "CHATTING"; x.convoId = id; setAgentActivity(x, "CHATTING", false); });
+            const aborted = () => a.convoId !== id || b.convoId !== id || a.state !== "CHATTING" || b.state !== "CHATTING";
+
+            // Điểm hẹn: giữa hai nhà, nhưng không đi xuyên trụ sở HQ
+            let mx = (a.group.position.x + b.group.position.x) / 2;
+            let mz = (a.group.position.z + b.group.position.z) / 2;
+            let len = Math.hypot(mx, mz);
+            if (len < 7) {
+                if (len < 0.5) { mx = 7.2; mz = 0; len = 7.2; }
+                else { mx = mx / len * 7.2; mz = mz / len * 7.2; len = 7.2; }
+            }
+            const px = -mz / len, pz = mx / len;
+            let sa = { x: mx + px * 0.75, z: mz + pz * 0.75 }, sb = { x: mx - px * 0.75, z: mz - pz * 0.75 };
+            const d1 = Math.hypot(a.group.position.x - sa.x, a.group.position.z - sa.z) + Math.hypot(b.group.position.x - sb.x, b.group.position.z - sb.z);
+            const d2 = Math.hypot(a.group.position.x - sb.x, a.group.position.z - sb.z) + Math.hypot(b.group.position.x - sa.x, b.group.position.z - sa.z);
+            if (d2 < d1) { const t = sa; sa = sb; sb = t; }
+
+            const statusText = document.getElementById('status-text');
+            if (statusText) statusText.innerText = `[TÁN GẪU] ${nickOf(a)} & ${nickOf(b)} đang ra góc bàn chuyện...`;
+
+            let arrived = 0;
+            const goTo = (agent, spot, onDone) => {
+                const dist = Math.hypot(agent.group.position.x - spot.x, agent.group.position.z - spot.z);
+                agent.group.lookAt(spot.x, agent.group.position.y, spot.z);
+                agent.convoTween = new TWEEN.Tween(agent.group.position)
+                    .to({ x: spot.x, z: spot.z }, Math.max(1500, dist * 450))
+                    .easing(TWEEN.Easing.Quadratic.InOut)
+                    .onComplete(onDone)
+                    .start();
+            };
+
+            const talk = () => {
+                if (aborted()) return;
+                a.group.lookAt(b.group.position.x, a.group.position.y, b.group.position.z);
+                b.group.lookAt(a.group.position.x, b.group.position.y, a.group.position.z);
+                const { lines, first, second } = findScript(a, b);
+                let t = 400;
+                lines.forEach(([who, text]) => {
+                    const speaker = who === 0 ? first : second;
+                    const msg = text.replace(/\{x\}/g, nickOf(first)).replace(/\{y\}/g, nickOf(second));
+                    const dur = Math.min(4200, Math.max(2400, 1500 + msg.length * 50));
+                    setTimeout(() => { if (!aborted()) showSpeechBubble(speaker.group, msg, dur); }, t);
+                    t += dur + 300;
+                });
+                setTimeout(goHome, t + 300);
+            };
+
+            const goHome = () => {
+                if (aborted()) return;
+                [a, b].forEach(x => {
+                    const dist = Math.hypot(x.group.position.x - x.homePos.x, x.group.position.z - x.homePos.z);
+                    x.group.lookAt(x.homePos.x, x.group.position.y, x.homePos.z);
+                    x.convoTween = new TWEEN.Tween(x.group.position)
+                        .to({ x: x.homePos.x, z: x.homePos.z }, Math.max(1500, dist * 450))
+                        .easing(TWEEN.Easing.Quadratic.InOut)
+                        .onComplete(() => {
+                            if (x.convoId === id && x.state === "CHATTING") {
+                                x.state = "IDLE";
+                                x.convoTween = null;
+                                setAgentActivity(x, "WORKING", false);
+                            }
+                        })
+                        .start();
+                });
+                const st = document.getElementById('status-text');
+                if (st) st.innerText = `Các AI Agent đang tự do trao đổi ý tưởng & đi sang Sora Tower nộp báo cáo.`;
+            };
+
+            goTo(a, sa, () => { arrived++; if (arrived === 2) talk(); });
+            goTo(b, sb, () => { arrived++; if (arrived === 2) talk(); });
+        }
+
+        // --- 6. RAYCASTER & INTERACTION ---
+        function setupRaycaster() {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            window.addEventListener('click', (event) => {
+                if (event.target.closest('#inspector-panel') || event.target.closest('.pointer-events-auto')) return;
+
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+
+                const intersects = raycaster.intersectObjects(scene.children, true);
+
+                if (intersects.length > 0) {
+                    let obj = intersects[0].object;
+                    while (obj.parent && obj.parent !== scene) {
+                        obj = obj.parent;
+                    }
+
+                    for (let key in buildingObjects) {
+                        if (buildingObjects[key] === obj) {
+                            focusOnBuilding(key);
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- 7. CAMERA FOCUS & INSPECTOR PANEL ---
+        function focusOnBuilding(key) {
+            selectedKey = key;
+            const targetBuilding = buildingObjects[key];
+            if (!targetBuilding) return;
+
+            const data = departmentsData[key];
+            const targetPos = targetBuilding.position;
+
+            const offset = key === 'center' ? new THREE.Vector3(12, 12, 12) : new THREE.Vector3(8, 8, 8);
+            const newCamPos = new THREE.Vector3().addVectors(targetPos, offset);
+
+            new TWEEN.Tween(camera.position)
+                .to({ x: newCamPos.x, y: newCamPos.y, z: newCamPos.z }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            new TWEEN.Tween(controls.target)
+                .to({ x: targetPos.x, y: targetPos.y + 2, z: targetPos.z }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            openInspector(data);
+        }
+
+        function resetCameraView() {
+            selectedKey = null;
+            new TWEEN.Tween(camera.position)
+                .to({ x: 30, y: 25, z: 30 }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            new TWEEN.Tween(controls.target)
+                .to({ x: 0, y: 0, z: 0 }, 1200)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            closeInspector();
+        }
+
+        function agentLookup(id) {
+            for (let key in departmentsData) {
+                const f = departmentsData[key].agents.find(a => a.id === id);
+                if (f) return f;
+            }
+            return null;
+        }
+
+        function openInspector(data) {
+            document.getElementById('panel-title').innerText = data.title;
+            document.getElementById('panel-subtitle').innerText = data.subtitle;
+            document.getElementById('panel-icon').innerHTML = `<i class="${data.icon}"></i>`;
+
+            const agentListHtml = data.agents.map(a => `
+                <div class="glass-button p-3 rounded-xl flex items-center justify-between text-xs">
+                    <div>
+                        <div class="font-semibold text-white flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ${a.role}
+                        </div>
+                        <div class="text-[10px] text-gray-400 mt-1 leading-snug">${(a.duties || []).join(' • ')}</div>
+                        <div class="text-[10px] text-cyan-300 mt-0.5">👤 ${a.humanLead || '—'} &nbsp;|&nbsp; 🔗 ${(a.linkedWith || []).map(id => { const x = agentLookup(id); return x ? x.role : id; }).join(', ')}</div>
+                    </div>
+                    <span class="px-2 py-1 rounded-md bg-white/5 text-[10px] text-indigo-300 border border-white/10 font-medium">${a.status}</span>
+                </div>
+            `).join('');
+            document.getElementById('agent-list').innerHTML = agentListHtml;
+
+            const p = data.proposal;
+            document.getElementById('proposal-box').innerHTML = `
+                <div class="text-xs font-bold text-purple-300 flex items-center justify-between">
+                    <span>${p.title}</span>
+                </div>
+                <p class="text-xs text-gray-300 leading-relaxed">${p.desc}</p>
+                <div class="pt-2 border-t border-white/10 flex justify-between text-[11px]">
+                    <span class="text-gray-400">Ngân sách: <strong class="text-emerald-400">${p.budget}</strong></span>
+                    <span class="text-gray-400">Dự phóng: <strong class="text-cyan-400">${p.revenue}</strong></span>
+                </div>
+                <div class="text-[11px] font-semibold text-indigo-300 bg-indigo-500/10 p-2 rounded-lg border border-indigo-500/20 text-center">
+                    Trạng thái: ${p.status}
+                </div>
+            `;
+
+            document.getElementById('inspector-panel').classList.remove('translate-x-full');
+        }
+
+        function closeInspector() {
+            document.getElementById('inspector-panel').classList.add('translate-x-full');
+        }
+
+        // --- TAB SWITCHING LOGIC & ANALYTICS POPULATION ---
+        function switchTab(tabName) {
+            const analyticsTab = document.getElementById('analytics-tab');
+            const bottomBar = document.getElementById('bottom-bar');
+            const btn3d = document.getElementById('tab-btn-3d');
+            const btnAnalytics = document.getElementById('tab-btn-analytics');
+
+            if (tabName === 'analytics') {
+                analyticsTab.classList.remove('hidden');
+                bottomBar.classList.add('opacity-0', 'pointer-events-none');
+                btnAnalytics.className = "glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-emerald-600/40 border-emerald-500/40 flex items-center gap-2";
+                btn3d.className = "glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:text-white flex items-center gap-2";
+                renderAnalyticsGrid();
+            } else {
+                analyticsTab.classList.add('hidden');
+                bottomBar.classList.remove('opacity-0', 'pointer-events-none');
+                btn3d.className = "glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-purple-600/40 border-purple-500/40 flex items-center gap-2";
+                btnAnalytics.className = "glass-button px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:text-white flex items-center gap-2";
+            }
+        }
+
+        function renderAnalyticsGrid() {
+            const container = document.getElementById('analytics-dept-grid');
+            let html = '';
+
+            for (let key in departmentsData) {
+                const dept = departmentsData[key];
+                const stats = dept.stats;
+                const hexColorStr = '#' + dept.color.toString(16).padStart(6, '0');
+
+                // Render Agent Efficiency List
+                const agentPerformanceHtml = dept.agents.map(a => `
+                    <div class="bg-black/30 p-2 rounded-xl border border-white/5 flex items-center justify-between text-[11px]">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="text-white font-medium">${a.role}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-400">${a.tasksDone} Tasks</span>
+                            <span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30 text-[10px]">${a.score} (${a.efficiency})</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Render Social Media Channels Stats
+                const socialHtml = dept.socialChannels.map(s => `
+                    <div class="flex items-center justify-between text-[11px] bg-white/5 px-2.5 py-1.5 rounded-lg">
+                        <span class="text-gray-300 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-globe ${s.color}"></i> ${s.name}
+                        </span>
+                        <div class="text-right">
+                            <span class="text-white font-bold block">${s.metric}</span>
+                            <span class="text-[9px] text-emerald-400">${s.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                html += `
+                    <div class="glass-panel p-5 rounded-2xl border border-white/10 flex flex-col justify-between space-y-4 hover:border-white/20 transition shadow-xl">
+                        <div class="space-y-3">
+                            <!-- Department Header -->
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white" style="background-color: ${hexColorStr}33; border: 1px solid ${hexColorStr}66;">
+                                        <i class="${dept.icon}"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-white text-sm">${dept.title}</h4>
+                                        <p class="text-[10px] text-gray-400">${dept.subtitle}</p>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold px-2.5 py-1 rounded-lg" style="background-color: ${hexColorStr}22; color: ${hexColorStr}; border: 1px solid ${hexColorStr}44;">
+                                    ${stats.progress}%
+                                </span>
+                            </div>
+
+                            <!-- Department Notice / Alert Banner -->
+                            <div class="p-2.5 rounded-xl bg-purple-900/30 border border-purple-500/30 text-[11px] text-purple-200 leading-relaxed font-medium">
+                                ${dept.notice}
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-[11px] text-gray-400">
+                                    <span>Tiến độ nhiệm vụ</span>
+                                    <span class="text-white font-medium">${stats.completedTasks}/${stats.totalTasks} Tasks hoàn tất</span>
+                                </div>
+                                <div class="w-full bg-black/40 h-2 rounded-full overflow-hidden border border-white/5">
+                                    <div class="h-full rounded-full transition-all duration-1000" style="width: ${stats.progress}%; background-color: ${hexColorStr};"></div>
+                                </div>
+                            </div>
+
+                            <!-- Individual Staff Performance -->
+                            <div class="space-y-1.5 pt-1">
+                                <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider flex items-center gap-1">
+                                    <i class="fa-solid fa-user-check text-indigo-400"></i> Hiệu Suất Nhân Viên (${dept.agents.length} AI)
+                                </span>
+                                <div class="space-y-1">
+                                    ${agentPerformanceHtml}
+                                </div>
+                            </div>
+
+                            <!-- Managed Social Media / Platform Analytics -->
+                            <div class="space-y-1.5 pt-1">
+                                <span class="text-[10px] uppercase font-bold text-gray-400 tracking-wider flex items-center gap-1">
+                                    <i class="fa-solid fa-share-nodes text-cyan-400"></i> Kênh Truyền Thông & Số Liệu Mang Lại
+                                </span>
+                                <div class="space-y-1">
+                                    ${socialHtml}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Button -->
+                        <div class="pt-3 border-t border-white/10 flex justify-between items-center">
+                            <span class="text-[10px] text-emerald-400 font-medium">🟢 Đã Đăng Tải Báo Cáo Mới</span>
+                            <button onclick="switchTab('3d'); focusOnBuilding('${key}')" class="text-xs text-indigo-300 hover:text-white font-medium flex items-center gap-1">
+                                Xem 3D <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // --- 8. ACTION HANDLERS ---
+        // --- ORCHESTRATOR: kết nối server /api/command (Claude) ---
+        const DEPT_KEYS = ['creative', 'cosplay', 'event', 'business', 'operations'];
+        const STORE_KEY = 'sora_plan_v1';
+        let currentCommand = "";
+        let currentPlan = null;
+        let planApproved = false;
+        let planBusy = false;
+
+        function esc(v) {
+            return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+        }
+
+        function openCommandModal(prefill) {
+            const modal = document.getElementById('command-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            try { document.getElementById('cmd-password').value = sessionStorage.getItem('sora_pw') || ''; } catch (e) {}
+            if (typeof prefill === 'string' && prefill) document.getElementById('cmd-text').value = prefill;
+        }
+
+        function closeCommandModal() {
+            const modal = document.getElementById('command-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function setCmdStatus(text, isError) {
+            const el = document.getElementById('cmd-status');
+            el.textContent = text || '';
+            el.className = 'text-[11px] ' + (isError ? 'text-rose-400' : 'text-gray-400');
+        }
+
+        async function callOrchestrator(payload) {
+            const pw = document.getElementById('cmd-password').value.trim();
+            if (!pw) throw new Error('Vui lòng nhập mật khẩu truy cập.');
+            const res = await fetch('/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-app-password': pw },
+                body: JSON.stringify(payload)
+            });
+            let data = null;
+            try { data = await res.json(); } catch (e) {}
+            if (res.status === 401) {
+                try { sessionStorage.removeItem('sora_pw'); } catch (e) {}
+                throw new Error('Sai mật khẩu.');
+            }
+            if (!res.ok || !data || !data.plan) {
+                throw new Error((data && data.error) || ('Lỗi server (' + res.status + ')'));
+            }
+            try { sessionStorage.setItem('sora_pw', pw); } catch (e) {}
+            return data.plan;
+        }
+
+        async function runCommand() {
+            if (planBusy) return;
+            const text = document.getElementById('cmd-text').value.trim();
+            if (!text) { setCmdStatus('Hãy nhập chỉ đạo trước.', true); return; }
+            planBusy = true;
+            document.getElementById('cmd-send').disabled = true;
+            setCmdStatus('Claude đang phân rã mục tiêu và kiểm duyệt nội dung... (có thể mất 20-40 giây)');
+            try {
+                const plan = await callOrchestrator({ command: text });
+                currentCommand = text;
+                planApproved = false;
+                setPlan(plan);
+                setCmdStatus('Đã có đề án. Mời Founder xem xét.');
+            } catch (err) {
+                setCmdStatus(err.message, true);
+            } finally {
+                planBusy = false;
+                document.getElementById('cmd-send').disabled = false;
+            }
+        }
+
+        async function reviseWithFeedback() {
+            if (!currentPlan) { setCmdStatus('Chưa có đề án để sửa.', true); return; }
+            if (planBusy) return;
+            const fb = document.getElementById('cmd-feedback').value.trim();
+            if (!fb) { setCmdStatus('Hãy nhập nội dung cần sửa.', true); return; }
+            planBusy = true;
+            setCmdStatus('Claude đang chỉnh sửa đề án theo chỉ đạo...');
+            try {
+                const plan = await callOrchestrator({ command: currentCommand, previousPlan: currentPlan, feedback: fb });
+                planApproved = false;
+                setPlan(plan);
+                document.getElementById('cmd-feedback').value = '';
+                setCmdStatus('Đã cập nhật đề án.');
+            } catch (err) {
+                setCmdStatus(err.message, true);
+            } finally {
+                planBusy = false;
+            }
+        }
+
+        const CLAUDE_PROMPT_TEMPLATE = `Bạn là Claude Orchestrator, Giám đốc Điều hành AI của Sora Group (công ty sự kiện, cosplay và nội dung số). Founder/CEO là người duyệt cuối.
+
+Nhiệm vụ: nhận chỉ đạo chiến lược, phân rã xuống 5 phòng ban, rồi KIỂM DUYỆT nội dung trước khi trình Founder.
+
+Danh sách AI Agent (dùng đúng id khi giao việc):
+- HQ: claude_main (Trợ Lý Trưởng), sora_orch (Điều Phối Viên)
+- creative: trend_scout (Săn Trend & Kịch Bản), video_editor (Dựng Video & VFX)
+- cosplay: talent_match (Casting & Talent), costume_viz (Design Costume 3D)
+- event: show_planner (Đạo Diễn Timeline), tech_stage (Kỹ Thuật Stage & LED), booth_coordinator (Quản Lý Booth)
+- business: sponsor_hunter (Săn Tài Trợ), ad_optimizer (Ads & Campaign)
+- operations: legal_guard (Pháp Lý & Hợp Đồng), finance_tracker (Kế Toán & Ngân Sách), hr_recruiter (Tuyển Dụng & Nhân Sự)
+
+Quy tắc:
+- Dữ liệu hiện tại của hệ thống chỉ là MÔ PHỎNG, chưa có số thực. Mọi con số ngân sách, doanh thu, KPI là GIẢ ĐỊNH hợp lý do bạn ước tính; hãy nêu rõ trong "assumptions". Không bịa số liệu như thể đã có thật.
+- Dùng tiếng Việt. Tiền ghi dạng "120,000,000 VNĐ". Tổng ngân sách các phòng phải khớp total_budget.
+- Mỗi phòng tối đa 3 tasks, 3 kpis, 2 risks; mô tả ngắn gọn.
+- Kiểm duyệt (compliance): kiểm tra bản quyền (nhạc, hình ảnh, nhân vật, thương hiệu), quy định nền tảng, cam kết quảng cáo quá mức hoặc số liệu chưa kiểm chứng, thiếu ghi chú tài trợ, nội dung nhạy cảm hoặc phản cảm, thông tin cá nhân của talent, giấy phép sự kiện. status là một trong "Đạt", "Cần sửa", "Từ chối". Ghi rõ lý do trong notes, và gắn cờ các mục cần Founder xem kỹ (nhạc, nhà tài trợ, hình ảnh talent). Bạn không thể xác minh giấy phép thật nên hãy nói rõ điều cần xác minh.
+- Nếu chỉ đạo vi phạm pháp luật hoặc có hại thì status "Từ chối" và giải thích.
+- Nếu có feedback từ Founder, chỉnh đề án trước đó theo đúng feedback.
+
+CHỈ trả về một đối tượng JSON hợp lệ, không có văn bản nào khác, không dùng markdown. Cấu trúc:
+{
+ "title": string, "summary": string, "total_budget": string, "expected_revenue": string,
+ "assumptions": [string],
+ "compliance": { "status": "Đạt"|"Cần sửa"|"Từ chối", "notes": [string] },
+ "departments": {
+   "creative"|"cosplay"|"event"|"business"|"operations": {
+     "title": string, "desc": string, "budget": string, "revenue": string,
+     "tasks": [ { "agent_id": string, "task": string, "deadline": string } ],
+     "kpis": [string],
+     "risks": [ { "risk": string, "mitigation": string } ]
+   }
+ },
+ "timeline": [ { "when": string, "what": string } ]
+}`;
+
+        function copyClaudePrompt() {
+            const cmd = document.getElementById('cmd-text').value.trim();
+            if (!cmd) { setCmdStatus('Hãy gõ chỉ đạo ở ô trên trước khi copy prompt.', true); return; }
+            const full = CLAUDE_PROMPT_TEMPLATE + '\n\nCHỈ ĐẠO CỦA FOUNDER:\n' + cmd;
+            const done = () => setCmdStatus('Đã copy. Dán vào Claude chat, rồi dán JSON Claude trả về vào ô bên dưới.');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(full).then(done).catch(() => fallbackCopy(full, done));
+            } else {
+                fallbackCopy(full, done);
+            }
+        }
+
+        function fallbackCopy(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) { setCmdStatus('Không copy được, hãy tự chọn và copy.', true); }
+            document.body.removeChild(ta);
+        }
+
+        function importPlan() {
+            const raw = document.getElementById('cmd-import').value;
+            try {
+                const a = raw.indexOf('{'), b = raw.lastIndexOf('}');
+                if (a === -1 || b <= a) throw new Error('Không thấy khối JSON. Hãy dán nguyên phần Claude trả về.');
+                const plan = JSON.parse(raw.slice(a, b + 1));
+                if (!plan || typeof plan !== 'object' || !plan.departments) throw new Error('JSON thiếu phần "departments".');
+                const missing = DEPT_KEYS.filter(k => !plan.departments[k]);
+                if (missing.length) throw new Error('Thiếu phòng ban: ' + missing.join(', '));
+                const okStatus = ['Đạt', 'Cần sửa', 'Từ chối'];
+                if (!plan.compliance || !okStatus.includes(plan.compliance.status)) {
+                    plan.compliance = { status: 'Cần sửa', notes: ['Đề án nhập tay chưa có kết quả kiểm duyệt hợp lệ của Claude.'] };
+                }
+                currentCommand = document.getElementById('cmd-text').value.trim() || 'Đề án nhập thủ công';
+                planApproved = false;
+                setPlan(plan);
+                setCmdStatus('Đã nhập đề án. Mời Founder xem xét.');
+            } catch (err) {
+                setCmdStatus('Nhập thất bại: ' + err.message, true);
+            }
+        }
+
+        function planStatusLabel() {
+            const c = currentPlan && currentPlan.compliance && currentPlan.compliance.status;
+            if (c === 'Từ chối') return '🔴 Claude từ chối - cần sửa lại';
+            if (planApproved) return '🟢 Founder đã duyệt';
+            if (c === 'Cần sửa') return '🟠 Claude yêu cầu sửa trước khi trình';
+            return '🟡 Claude đã kiểm duyệt - Chờ Founder duyệt';
+        }
+
+        function applyPlanToDashboard() {
+            if (!currentPlan) return;
+            const status = planStatusLabel();
+            const depts = currentPlan.departments || {};
+            DEPT_KEYS.forEach(key => {
+                const d = depts[key];
+                if (!d || !departmentsData[key]) return;
+                departmentsData[key].proposal = {
+                    title: String(d.title || ''), desc: String(d.desc || ''),
+                    budget: String(d.budget || ''), revenue: String(d.revenue || ''), status: status
+                };
+                const first = (d.tasks && d.tasks[0] && d.tasks[0].task) ? d.tasks[0].task : '';
+                if (first) departmentsData[key].notice = '📋 CHỈ ĐẠO MỚI: ' + first;
+            });
+            departmentsData.center.proposal = {
+                title: String(currentPlan.title || ''), desc: String(currentPlan.summary || ''),
+                budget: String(currentPlan.total_budget || ''), revenue: String(currentPlan.expected_revenue || ''), status: status
+            };
+            departmentsData.center.notice = '🔔 BÁO CÁO HQ: ' + (planApproved ? 'Founder đã duyệt đề án.' : 'Đề án mới đã qua kiểm duyệt, chờ Founder duyệt cuối.');
+            try { if (selectedKey) openInspector(departmentsData[selectedKey]); } catch (e) {}
+            try { renderAnalyticsGrid(); } catch (e) {}
+        }
+
+        function savePlan() {
+            try { localStorage.setItem(STORE_KEY, JSON.stringify({ command: currentCommand, plan: currentPlan, approved: planApproved })); } catch (e) {}
+        }
+
+        function loadSavedPlan() {
+            try {
+                const raw = localStorage.getItem(STORE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+                if (saved && saved.plan && saved.plan.departments) {
+                    currentCommand = saved.command || '';
+                    currentPlan = saved.plan;
+                    planApproved = !!saved.approved;
+                    applyPlanToDashboard();
+                }
+            } catch (e) {}
+        }
+
+        function setPlan(plan) {
+            currentPlan = plan;
+            applyPlanToDashboard();
+            renderPlan();
+            savePlan();
+        }
+
+        function renderPlan() {
+            const out = document.getElementById('plan-output');
+            const actions = document.getElementById('plan-actions');
+            const p = currentPlan;
+            if (!p) { out.innerHTML = ''; actions.classList.add('hidden'); return; }
+            const comp = p.compliance || {};
+            const cs = comp.status || 'Đạt';
+            const badge = cs === 'Đạt' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : cs === 'Cần sửa' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+            const list = (arr, cls) => (arr || []).map(x => `<li class="${cls || ''}">${esc(x)}</li>`).join('');
+            const deptNames = { creative: 'Sáng Tạo', cosplay: 'Cosplay', event: 'Sự Kiện', business: 'Kinh Doanh', operations: 'Vận Hành' };
+
+            const deptHtml = DEPT_KEYS.map(key => {
+                const d = (p.departments || {})[key];
+                if (!d) return '';
+                const tasks = (d.tasks || []).map(t => {
+                    const ag = agentLookup(t.agent_id);
+                    return `<tr class="border-t border-white/5">
+                        <td class="py-1.5 pr-2 text-indigo-300 whitespace-nowrap align-top">${esc(ag ? ag.role : t.agent_id)}</td>
+                        <td class="py-1.5 pr-2 text-gray-200 align-top">${esc(t.task)}</td>
+                        <td class="py-1.5 text-gray-400 whitespace-nowrap align-top">${esc(t.deadline)}</td></tr>`;
+                }).join('');
+                const risks = (d.risks || []).map(r => `<li><span class="text-rose-300">${esc(r.risk)}</span> → <span class="text-gray-300">${esc(r.mitigation)}</span></li>`).join('');
+                return `<div class="glass-button rounded-2xl p-4 border border-white/10">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-sm font-bold text-white">${esc(deptNames[key])}: ${esc(d.title)}</div>
+                    </div>
+                    <p class="text-[11px] text-gray-300 mt-1 leading-relaxed">${esc(d.desc)}</p>
+                    <div class="flex flex-wrap gap-4 text-[11px] mt-2">
+                        <span class="text-gray-400">Ngân sách: <strong class="text-emerald-400">${esc(d.budget)}</strong></span>
+                        <span class="text-gray-400">Dự phóng: <strong class="text-cyan-400">${esc(d.revenue)}</strong></span>
+                    </div>
+                    <table class="w-full text-[11px] mt-3"><tbody>${tasks}</tbody></table>
+                    <div class="grid md:grid-cols-2 gap-3 mt-3 text-[11px]">
+                        <div><div class="text-gray-400 font-semibold mb-1">KPI</div><ul class="list-disc pl-4 text-gray-200 space-y-0.5">${list(d.kpis)}</ul></div>
+                        <div><div class="text-gray-400 font-semibold mb-1">Rủi ro → Phương án</div><ul class="list-disc pl-4 space-y-0.5">${risks}</ul></div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            const timeline = (p.timeline || []).map(t => `<li><span class="text-purple-300 font-semibold">${esc(t.when)}</span> – ${esc(t.what)}</li>`).join('');
+
+            out.innerHTML = `
+                <div class="glass-button rounded-2xl p-4 border border-purple-500/30">
+                    <div class="text-base font-bold text-white">${esc(p.title)}</div>
+                    <p class="text-xs text-gray-300 mt-1 leading-relaxed">${esc(p.summary)}</p>
+                    <div class="flex flex-wrap gap-4 text-xs mt-3">
+                        <span class="text-gray-400">Tổng ngân sách: <strong class="text-emerald-400">${esc(p.total_budget)}</strong></span>
+                        <span class="text-gray-400">Dự phóng doanh thu: <strong class="text-cyan-400">${esc(p.expected_revenue)}</strong></span>
+                    </div>
+                    <div class="text-[10px] text-amber-300 mt-2">Số liệu là giả định do Claude ước tính (dữ liệu hệ thống đang là mô phỏng), cần thay bằng số thực.</div>
+                </div>
+                <div class="rounded-2xl p-4 border ${badge}">
+                    <div class="text-xs font-bold">Kiểm duyệt của Claude: ${esc(cs)}</div>
+                    <ul class="list-disc pl-4 text-[11px] mt-1 space-y-0.5">${list(comp.notes)}</ul>
+                </div>
+                <div class="glass-button rounded-2xl p-4 border border-white/10 text-[11px]">
+                    <div class="text-gray-400 font-semibold mb-1">Giả định</div>
+                    <ul class="list-disc pl-4 text-gray-200 space-y-0.5">${list(p.assumptions)}</ul>
+                </div>
+                ${deptHtml}
+                <div class="glass-button rounded-2xl p-4 border border-white/10 text-[11px]">
+                    <div class="text-gray-400 font-semibold mb-1">Lộ trình</div>
+                    <ul class="space-y-1">${timeline}</ul>
+                </div>`;
+            actions.classList.remove('hidden');
+            document.getElementById('plan-approve').disabled = (cs === 'Từ chối');
+        }
+
+        // --- 8. ACTION HANDLERS ---
+        function approveProject() {
+            if (!currentPlan) {
+                openCommandModal();
+                setCmdStatus('Chưa có đề án nào. Hãy gửi chỉ đạo trước.', true);
+                return;
+            }
+            if (currentPlan.compliance && currentPlan.compliance.status === 'Từ chối') {
+                openCommandModal();
+                setCmdStatus('Claude đã từ chối đề án này, hãy yêu cầu sửa.', true);
+                return;
+            }
+            planApproved = true;
+            savePlan();
+            applyPlanToDashboard();
+            renderPlan();
+            const statusPill = document.getElementById('status-pill');
+            statusPill.innerHTML = `
+                <span class="flex h-2.5 w-2.5 relative">
+                  <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span class="text-emerald-300 font-semibold">ĐÃ DUYỆT! Các phòng ban bắt đầu triển khai theo đề án.</span>
+            `;
+            setCmdStatus('Founder đã duyệt. (Chưa nối mạng xã hội nên chưa có bài nào được đăng tự động.)');
+            try { triggerMeetingEvent(); } catch (e) {}
+        }
+
+        function rejectProject() {
+            openCommandModal();
+            if (!currentPlan) { setCmdStatus('Chưa có đề án nào để sửa.', true); return; }
+            const fb = document.getElementById('cmd-feedback');
+            if (fb) fb.focus();
+        }
+
+        function sendCommand() {
+            const input = document.getElementById('command-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = "";
+            openCommandModal(text);
+            runCommand();
+        }
+
+        // --- 9. ANIMATION LOOP & OVERLAY SYNC ---
+        function animateWorld(time, seconds) {
+            time = time || performance.now();
+            agentObjects.forEach(agent => {
+                const g = agent.group, p = agent.parts;
+                const dx = g.position.x - agent.lastPos.x, dz = g.position.z - agent.lastPos.z;
+                const moved = Math.sqrt(dx * dx + dz * dz);
+                agent.lastPos.x = g.position.x; agent.lastPos.z = g.position.z;
+                const talking = performance.now() < agent.talkUntil;
+
+                if (moved > 0.003) {
+                    agent.walkPhase += moved * 9;
+                    const sw = Math.sin(agent.walkPhase);
+                    p.legL.rotation.x = sw * 0.7; p.legR.rotation.x = -sw * 0.7;
+                    p.armL.rotation.x = -sw * 0.6; p.armR.rotation.x = sw * 0.6;
+                    g.position.y = agent.initialY + Math.abs(sw) * 0.07;
+                } else {
+                    p.legL.rotation.x *= 0.8; p.legR.rotation.x *= 0.8;
+                    p.armL.rotation.x *= 0.8; p.armR.rotation.x *= 0.8;
+                    if (agent.state === "IDLE") {
+                        g.position.y = agent.initialY + Math.sin(seconds * 2.5 + agent.speed) * 0.04;
+                    } else {
+                        g.position.y += (agent.initialY - g.position.y) * 0.2;
+                    }
+                }
+
+                // Vẫy tay khi nói
+                const armTarget = talking ? 2.3 + Math.sin(seconds * 9) * 0.3 : 0.15;
+                p.armR.rotation.z += (armTarget - p.armR.rotation.z) * 0.25;
+
+                // Đầu lắc lư, miệng mở khi nói
+                if (talking) {
+                    p.head.rotation.z = Math.sin(seconds * 7 + agent.speed * 50) * 0.08;
+                    p.head.rotation.x = Math.sin(seconds * 9) * 0.05;
+                    p.mouth.scale.y = 1 + Math.abs(Math.sin(seconds * 12)) * 1.2;
+                } else {
+                    p.head.rotation.z = Math.sin(seconds * 1.2 + agent.speed * 40) * 0.03;
+                    p.head.rotation.x *= 0.85;
+                    p.mouth.scale.y = 1;
+                }
+
+                // Chớp mắt
+                let blinking = false;
+                if (time > agent.nextBlink) {
+                    blinking = true;
+                    if (time > agent.nextBlink + 140) { agent.nextBlink = time + 2500 + Math.random() * 3500; blinking = false; }
+                }
+                p.eyes.forEach(e => { e.scale.y = blinking ? 0.12 : 1.35; });
+            });
+
+            for (const key in buildingObjects) {
+                const b = buildingObjects[key];
+                if (b.userData && b.userData.spinners) {
+                    b.userData.spinners.forEach((m, i) => {
+                        m.rotation.y += 0.02;
+                        m.position.y = m.userData.baseY + Math.sin(seconds * 1.6 + i) * 0.08;
+                    });
+                }
+            }
+
+            if (sparkles) {
+                sparkles.rotation.y = seconds * 0.03;
+                sparkles.material.opacity = 0.55 + Math.sin(seconds * 2) * 0.25;
+            }
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            TWEEN.update();
+            controls.update();
+
+            if (!selectedKey) {
+                scene.rotation.y += 0.0008;
+            }
+
+            const seconds = time * 0.001;
+            animateWorld(time, seconds);
+
+            renderer.render(scene, camera);
+            updateLabelsPosition();
+        }
+
+        function updateLabelsPosition() {
+            const tempV = new THREE.Vector3();
+
+            agentObjects.forEach(agent => {
+                tempV.setFromMatrixPosition(agent.group.matrixWorld);
+                tempV.y += 2.1;
+                tempV.project(camera);
+
+                const x = (tempV.x *  .5 + .5) * window.innerWidth;
+                const y = (tempV.y * -.5 + .5) * window.innerHeight;
+
+                if (tempV.z > 1) {
+                    agent.labelEl.style.opacity = 0;
+                    if (agent.bubble) agent.bubble.el.style.visibility = 'hidden';
+                } else {
+                    agent.labelEl.style.opacity = 1;
+                    agent.labelEl.style.left = `${x}px`;
+                    agent.labelEl.style.top = `${y}px`;
+                    if (agent.bubble) {
+                        agent.bubble.el.style.visibility = 'visible';
+                        agent.bubble.el.style.left = `${x}px`;
+                        agent.bubble.el.style.top = `${y - (agent.labelEl.offsetHeight || 40) - 6}px`;
+                    }
+                }
+            });
+
+            for (let key in buildingObjects) {
+                const b = buildingObjects[key];
+                if (b.userData && b.userData.labelEl) {
+                    tempV.setFromMatrixPosition(b.matrixWorld);
+                    tempV.y += b.userData.heightOffset;
+                    tempV.project(camera);
+
+                    const x = (tempV.x *  .5 + .5) * window.innerWidth;
+                    const y = (tempV.y * -.5 + .5) * window.innerHeight;
+
+                    if (tempV.z > 1) {
+                        b.userData.labelEl.style.opacity = 0;
+                    } else {
+                        b.userData.labelEl.style.opacity = 1;
+                        b.userData.labelEl.style.left = `${x}px`;
+                        b.userData.labelEl.style.top = `${y}px`;
+                    }
+                }
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = function() {
+            loadSavedPlan();
+            init3D();
+        }
+    </script>
+</body>
+</html>
